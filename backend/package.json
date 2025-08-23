@@ -1,29 +1,56 @@
 {
   "name": "FileForge_backend",
   "version": "1.0.0",
-  "main": "main.js",
+  "main": "main.mjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "cross-env NODE_ENV=development electron ."
+    "start": "node server.mjs",
+    "dev": "nodemon server.mjs",
+    "electron": "electron .",
+    "electron-dev": "electron . --dev",
+    "app": "concurrently \"npm run start\" \"npm run electron\"",
+    "app-dev": "concurrently \"npm run dev\" \"npm run electron-dev\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "file-processing",
+    "ocr",
+    "compression",
+    "conversion"
+  ],
   "author": "Manpreet Singh",
   "license": "ISC",
-  "type": "commonjs",
-  "description": "",
+  "type": "module",
+  "description": "Backend API for FileForge - File processing, conversion, compression, and OCR",
   "dependencies": {
-    "7zip-bin": "^5.2.0",
+    "archiver": "^6.0.1",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.1",
-    "electron": "^37.2.4",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.3",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mammoth": "^1.6.0",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.0-rc.3",
+    "node-cron": "^3.0.3",
+    "pdf-parse": "^1.1.1",
     "sharp": "^0.34.3",
+    "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
-    "tesseract.js": "^6.0.1"
+    "tesseract.js": "^6.0.1",
+    "unzipper": "^0.10.14",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "cross-env": "^10.0.0",
-    "electron-reload": "^2.0.0-alpha.1",
-    "electron-reloader": "^1.2.3"
+    "concurrently": "^8.2.2",
+    "electron": "^28.3.3",
+    "electron-reloader": "^1.2.3",
+    "nodemon": "^3.0.2"
   }
 }
