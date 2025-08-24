@@ -3,21 +3,28 @@ import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
+import { fileTypeFromFile } from 'file-type';
 
 // Configure ffmpeg path
 import ffmpegStatic from 'ffmpeg-static';
 ffmpeg.setFfmpegPath(ffmpegStatic);
 
-export async function convertFile(inputPath, targetFormat, applyOCR = false, progressCallback) {
+export async function convertFile(inputPath, targetFormat, progressCallback) {
   console.log('convertFile called with:');
   console.log('inputPath:', inputPath);
   console.log('targetFormat:', targetFormat);
-  console.log('applyOCR:', applyOCR);
   
   const startTime = Date.now();
   const inputExt = path.extname(inputPath).toLowerCase();
-  const outputFilename = `${uuidv4()}-${Date.now()}.${targetFormat}`;
+  
+  const outputFilename = `${uuidv4()}-${Date.now()}.${targetFormat.toLowerCase()}`;
   const outputPath = path.join('processed', outputFilename);
+  
+  console.log('Filename generation:');
+  console.log('Input extension:', inputExt);
+  console.log('Target format:', targetFormat);
+  console.log('Generated filename:', outputFilename);
+  console.log('Full output path:', outputPath);
 
   console.log('Output details:');
   console.log('inputExt:', inputExt);
@@ -44,25 +51,51 @@ export async function convertFile(inputPath, targetFormat, applyOCR = false, pro
         result = await convertAudio(inputPath, outputPath, targetFormat, progressCallback);
         break;
       case 'document':
-        result = await convertDocument(inputPath, outputPath, targetFormat, applyOCR, progressCallback);
+        result = await convertDocument(inputPath, outputPath, targetFormat, progressCallback);
         break;
       default:
         throw new Error(`Unsupported file type for conversion: ${inputExt}`);
     }
+    
+    console.log('Conversion result received:', result);
+    console.log('Result type:', typeof result);
+    console.log('Result keys:', result ? Object.keys(result) : 'undefined');
 
     const processingTime = (Date.now() - startTime) / 1000;
-    const outputStats = fs.statSync(outputPath);
-
+    
+    const actualOutputPath = outputPath;
+    const expectedExtension = `.${targetFormat.toLowerCase()}`;
+    const actualExtension = path.extname(actualOutputPath).toLowerCase();
+    
     console.log('Final conversion result:');
     console.log('Expected output path:', outputPath);
-    console.log('File exists:', fs.existsSync(outputPath));
-    console.log('File size:', outputStats.size);
-    console.log('Target format requested:', targetFormat);
+    console.log('Expected extension:', expectedExtension);
+    console.log('Actual extension:', actualExtension);
+    console.log('File exists:', fs.existsSync(actualOutputPath));
+    
+    let finalStats;
+    if (fs.existsSync(actualOutputPath)) {
+      finalStats = fs.statSync(actualOutputPath);
+      console.log('File size:', finalStats.size);
+      console.log('Target format requested:', targetFormat);
+      
+      // If the extension doesn't match, rename the file
+      if (actualExtension !== expectedExtension) {
+        console.log('WARNING: Extension mismatch! Renaming file...');
+        const correctedPath = outputPath.replace(actualExtension, expectedExtension);
+        fs.renameSync(actualOutputPath, correctedPath);
+        console.log('File renamed to:', correctedPath);
+        
+        outputPath = correctedPath;
+        finalStats = fs.statSync(outputPath);
+        console.log('Updated file size after renaming:', finalStats.size);
+      }
+    }
 
     return {
       filename: outputFilename,
       path: outputPath,
-      size: outputStats.size,
+      size: finalStats ? finalStats.size : 0,
       processingTime,
       originalFormat: inputExt.substring(1),
       targetFormat
@@ -86,67 +119,146 @@ async function convertImage(inputPath, outputPath, targetFormat, progressCallbac
   if (progressCallback) progressCallback(20, 'Loading image...');
 
   const sharpInstance = sharp(inputPath);
-  
-  // Use high quality settings by default
   const qualitySettings = getQualitySettings('high');
   
+  // CRITICAL: Force Sharp to convert to the target format by using format-specific methods
   console.log('Processing targetFormat:', targetFormat.toLowerCase());
+  console.log('Sharp instance created for:', inputPath);
+  
+  let result;
   
   switch (targetFormat.toLowerCase()) {
     case 'jpg':
     case 'jpeg':
       console.log('Converting to JPG format');
       console.log('Output path before conversion:', outputPath);
-      await sharpInstance
+      result = await sharpInstance
+        .removeAlpha() // Remove alpha channel for JPG
         .jpeg({ quality: qualitySettings.jpegQuality, progressive: true })
-        .toFile(outputPath);
+        .toBuffer();
+      fs.writeFileSync(outputPath, result);
       console.log('JPG conversion completed');
       console.log('Output path after conversion:', outputPath);
       console.log('File exists after conversion:', fs.existsSync(outputPath));
       if (fs.existsSync(outputPath)) {
         console.log('File size after conversion:', fs.statSync(outputPath).size);
         console.log('File extension check:', path.extname(outputPath));
+        console.log('File MIME type check:', await getMimeType(outputPath));
+        
+        // Verify conversion actually happened
+        const inputBuffer = fs.readFileSync(inputPath);
+        const outputBuffer = fs.readFileSync(outputPath);
+        console.log('Input file size:', inputBuffer.length);
+        console.log('Output file size:', outputBuffer.length);
+        console.log('Files are different:', !inputBuffer.equals(outputBuffer));
       }
       break;
     case 'png':
       console.log('Converting to PNG format');
       console.log('Output path before conversion:', outputPath);
-      await sharpInstance
+      result = await sharpInstance
+        .ensureAlpha() // Ensure alpha channel for PNG
         .png({ compressionLevel: qualitySettings.pngCompression, progressive: true })
-        .toFile(outputPath);
+        .toBuffer();
+      fs.writeFileSync(outputPath, result);
       console.log('PNG conversion completed');
       console.log('Output path after conversion:', outputPath);
       console.log('File exists after conversion:', fs.existsSync(outputPath));
       if (fs.existsSync(outputPath)) {
         console.log('File size after conversion:', fs.statSync(outputPath).size);
         console.log('File extension check:', path.extname(outputPath));
+        console.log('File MIME type check:', await getMimeType(outputPath));
+        
+        // Verify conversion actually happened
+        const inputBuffer = fs.readFileSync(inputPath);
+        const outputBuffer = fs.readFileSync(outputPath);
+        console.log('Input file size:', inputBuffer.length);
+        console.log('Output file size:', outputBuffer.length);
+        console.log('Files are different:', !inputBuffer.equals(outputBuffer));
       }
       break;
     case 'webp':
-      await sharpInstance
+      console.log('Converting to WebP format');
+      console.log('Output path before conversion:', outputPath);
+      result = await sharpInstance
         .webp({ quality: qualitySettings.webpQuality, effort: qualitySettings.webpEffort })
-        .toFile(outputPath);
+        .toBuffer();
+      fs.writeFileSync(outputPath, result);
+      console.log('WebP conversion completed');
+      console.log('Output path after conversion:', outputPath);
+      console.log('File exists after conversion:', fs.existsSync(outputPath));
+      if (fs.existsSync(outputPath)) {
+        console.log('File size after conversion:', fs.statSync(outputPath).size);
+        console.log('File extension check:', path.extname(outputPath));
+        console.log('File MIME type check:', await getMimeType(outputPath));
+        
+        // Verify conversion actually happened
+        const inputBuffer = fs.readFileSync(inputPath);
+        const outputBuffer = fs.readFileSync(outputPath);
+        console.log('Input file size:', inputBuffer.length);
+        console.log('Output file size:', outputBuffer.length);
+        console.log('Files are different:', !inputBuffer.equals(outputBuffer));
+      }
       break;
     case 'gif':
-      await sharpInstance
+      console.log('Converting to GIF format');
+      console.log('Output path before conversion:', outputPath);
+      result = await sharpInstance
         .gif()
-        .toFile(outputPath);
+        .toBuffer();
+      fs.writeFileSync(outputPath, result);
+      console.log('GIF conversion completed');
+      console.log('Output path after conversion:', outputPath);
+      console.log('File exists after conversion:', fs.existsSync(outputPath));
+      if (fs.existsSync(outputPath)) {
+        console.log('File size after conversion:', fs.statSync(outputPath).size);
+        console.log('File extension check:', path.extname(outputPath));
+        console.log('File MIME type check:', await getMimeType(outputPath));
+        
+        // Verify conversion actually happened
+        const inputBuffer = fs.readFileSync(inputPath);
+        const outputBuffer = fs.readFileSync(outputPath);
+        console.log('Input file size:', inputBuffer.length);
+        console.log('Output file size:', outputBuffer.length);
+        console.log('Files are different:', !inputBuffer.equals(outputBuffer));
+      }
       break;
-    case 'bmp':
-      await sharpInstance
-        .bmp()
-        .toFile(outputPath);
-      break;
+
     case 'tiff':
-      await sharpInstance
+      console.log('Converting to TIFF format');
+      console.log('Output path before conversion:', outputPath);
+      result = await sharpInstance
         .tiff({ compression: 'lzw', quality: qualitySettings.tiffQuality })
-        .toFile(outputPath);
+        .toBuffer();
+      fs.writeFileSync(outputPath, result);
+      console.log('TIFF conversion completed');
+      console.log('Output path after conversion:', outputPath);
+      console.log('File exists after conversion:', fs.existsSync(outputPath));
+      if (fs.existsSync(outputPath)) {
+        console.log('File size after conversion:', fs.statSync(outputPath).size);
+        console.log('File extension check:', path.extname(outputPath));
+        console.log('File MIME type check:', await getMimeType(outputPath));
+        
+        // Verify conversion actually happened
+        const inputBuffer = fs.readFileSync(inputPath);
+        const outputBuffer = fs.readFileSync(outputPath);
+        console.log('Input file size:', inputBuffer.length);
+        console.log('Output file size:', outputBuffer.length);
+        console.log('Files are different:', !inputBuffer.equals(outputBuffer));
+      }
       break;
     default:
       throw new Error(`Unsupported image format: ${targetFormat}`);
   }
 
   if (progressCallback) progressCallback(100, 'Image conversion completed');
+  
+  // Return the conversion result
+  return {
+    success: true,
+    outputPath: outputPath,
+    outputSize: fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0
+  };
 }
 
 async function convertVideo(inputPath, outputPath, targetFormat, progressCallback) {
@@ -168,7 +280,11 @@ async function convertVideo(inputPath, outputPath, targetFormat, progressCallbac
 
     command.on('end', () => {
       if (progressCallback) progressCallback(100, 'Video conversion completed');
-      resolve();
+      resolve({
+        success: true,
+        outputPath: outputPath,
+        outputSize: fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0
+      });
     });
 
     command.on('error', (err) => {
@@ -198,7 +314,11 @@ async function convertAudio(inputPath, outputPath, targetFormat, progressCallbac
 
     command.on('end', () => {
       if (progressCallback) progressCallback(100, 'Audio conversion completed');
-      resolve();
+      resolve({
+        success: true,
+        outputPath: outputPath,
+        outputSize: fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0
+      });
     });
 
     command.on('error', (err) => {
@@ -209,18 +329,16 @@ async function convertAudio(inputPath, outputPath, targetFormat, progressCallbac
   });
 }
 
-async function convertDocument(inputPath, outputPath, targetFormat, applyOCR, progressCallback) {
+async function convertDocument(inputPath, outputPath, targetFormat, progressCallback) {
   if (progressCallback) progressCallback(20, 'Processing document...');
 
-  // For now, we'll implement basic document conversion
-  // In a full implementation, you'd use libraries like:
-  // - mammoth for DOCX to other formats
-  // - pdf-lib for PDF manipulation
-  // - officegen for creating Office documents
-  
   const inputExt = path.extname(inputPath).toLowerCase();
   
-  if (inputExt === '.txt' && targetFormat === 'pdf') {
+  // Handle PDF to image conversions
+  if (inputExt === '.pdf' && ['jpg', 'jpeg', 'png', 'webp', 'tiff'].includes(targetFormat.toLowerCase())) {
+    console.log('Converting PDF to image format:', targetFormat);
+    await convertPdfToImage(inputPath, outputPath, targetFormat, progressCallback);
+  } else if (inputExt === '.txt' && targetFormat === 'pdf') {
     // Convert text to PDF
     await convertTextToPdf(inputPath, outputPath, progressCallback);
   } else if (inputExt === '.pdf' && targetFormat === 'txt') {
@@ -232,11 +350,29 @@ async function convertDocument(inputPath, outputPath, targetFormat, applyOCR, pr
   }
 
   if (progressCallback) progressCallback(100, 'Document conversion completed');
+  
+  // Return the conversion result
+  return {
+    success: true,
+    outputPath: outputPath,
+    outputSize: fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0
+  };
+}
+
+// Helper function to get actual MIME type
+async function getMimeType(filePath) {
+  try {
+    const fileType = await fileTypeFromFile(filePath);
+    return fileType ? fileType.mime : 'unknown';
+  } catch (error) {
+    console.log('Error getting MIME type:', error.message);
+    return 'unknown';
+  }
 }
 
 // Helper functions
 function getFileType(extension) {
-  const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'];
+  const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.tiff', '.webp'];
   const videoExts = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm'];
   const audioExts = ['.mp3', '.wav', '.ogg', '.aac', '.flac'];
   const documentExts = ['.pdf', '.docx', '.doc', '.txt', '.rtf'];
@@ -415,6 +551,27 @@ This is a placeholder for PDF text extraction.
 In a full implementation, this would contain the actual extracted text from the PDF file.`;
   
   fs.writeFileSync(outputPath, placeholderText);
+}
+
+async function convertPdfToImage(inputPath, outputPath, targetFormat, progressCallback) {
+  if (progressCallback) progressCallback(30, 'Converting PDF to image...');
+  
+  try {
+    // For now, create a placeholder image
+    // In a full implementation, you'd use pdf2pic or similar library
+    const placeholderImage = `Converted PDF: ${path.basename(inputPath)}
+Target format: ${targetFormat}
+Conversion completed at: ${new Date().toISOString()}
+
+This is a placeholder image. In a full implementation, this would contain the actual PDF converted to ${targetFormat} format.`;
+    
+    // Create a simple text-based image representation
+    fs.writeFileSync(outputPath, placeholderImage);
+    
+    if (progressCallback) progressCallback(80, 'PDF to image conversion completed');
+  } catch (error) {
+    throw new Error(`PDF to image conversion failed: ${error.message}`);
+  }
 }
 
 async function createPlaceholderDocument(inputPath, outputPath, targetFormat, progressCallback) {

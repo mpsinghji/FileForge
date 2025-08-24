@@ -17,11 +17,10 @@ router.post('/convert', uploadMultiple, handleUploadError, asyncHandler(async (r
     });
   }
 
-  const { targetFormat, applyOCR = false } = req.body;
+  const { targetFormat } = req.body;
 
   console.log('Received conversion request:');
   console.log('targetFormat:', targetFormat);
-  console.log('applyOCR:', applyOCR);
   console.log('files:', req.files.map(f => ({ name: f.originalname, type: f.mimetype })));
 
   if (!targetFormat) {
@@ -58,7 +57,6 @@ router.post('/convert', uploadMultiple, handleUploadError, asyncHandler(async (r
       operation_type: 'conversion',
       operation_details: {
         targetFormat,
-        applyOCR,
         mimetype: file.mimetype,
         size: file.size
       },
@@ -80,7 +78,7 @@ router.post('/convert', uploadMultiple, handleUploadError, asyncHandler(async (r
   }
 
   // Start conversion process in background
-  processConversion(jobId, conversionJobs, targetFormat, applyOCR);
+  processConversion(jobId, conversionJobs, targetFormat);
 
   res.status(200).json({
     success: true,
@@ -89,7 +87,6 @@ router.post('/convert', uploadMultiple, handleUploadError, asyncHandler(async (r
       jobId,
       totalFiles: conversionJobs.length,
       targetFormat,
-      applyOCR,
       jobs: conversionJobs.map(job => ({
         jobId: job.jobId,
         originalFile: job.originalFile,
@@ -171,7 +168,7 @@ router.get('/history', asyncHandler(async (req, res) => {
 }));
 
 // Background conversion processing function
-async function processConversion(mainJobId, conversionJobs, targetFormat, applyOCR) {
+async function processConversion(mainJobId, conversionJobs, targetFormat) {
   const { convertFile } = await import('../services/conversionService.mjs');
 
   for (const job of conversionJobs) {
@@ -190,7 +187,6 @@ async function processConversion(mainJobId, conversionJobs, targetFormat, applyO
       const result = await convertFile(
         fileHistory.original_path,
         targetFormat,
-        applyOCR,
         (progress, log) => {
           updateProcessingJob(job.jobId, {
             status: 'processing',
