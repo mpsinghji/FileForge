@@ -19,9 +19,7 @@ router.post('/convert', uploadMultiple, handleUploadError, asyncHandler(async (r
 
   const { targetFormat } = req.body;
 
-  console.log('Received conversion request:');
-  console.log('targetFormat:', targetFormat);
-  console.log('files:', req.files.map(f => ({ name: f.originalname, type: f.mimetype })));
+  console.log('Received conversion request:', { targetFormat, files: req.files.map(f => ({ name: f.originalname, type: f.mimetype })) });
 
   if (!targetFormat) {
     return res.status(400).json({
@@ -173,17 +171,14 @@ async function processConversion(mainJobId, conversionJobs, targetFormat) {
 
   for (const job of conversionJobs) {
     try {
-      // Update job status to processing
       await updateProcessingJob(job.jobId, {
         status: 'processing',
         progress: 0,
         logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Starting conversion...' }])
       });
 
-      // Get file history
       const fileHistory = await getFileHistoryById(job.fileHistoryId);
       
-      // Convert file
       const result = await convertFile(
         fileHistory.original_path,
         targetFormat,
@@ -196,7 +191,6 @@ async function processConversion(mainJobId, conversionJobs, targetFormat) {
         }
       );
 
-      // Update file history with results
       await updateFileHistory(job.fileHistoryId, {
         processed_filename: result.filename,
         processed_path: result.path,
@@ -205,7 +199,6 @@ async function processConversion(mainJobId, conversionJobs, targetFormat) {
         status: 'completed'
       });
 
-      // Update job status to completed
       await updateProcessingJob(job.jobId, {
         status: 'completed',
         progress: 100,
@@ -215,14 +208,12 @@ async function processConversion(mainJobId, conversionJobs, targetFormat) {
     } catch (error) {
       console.error(`Conversion failed for job ${job.jobId}:`, error);
 
-      // Update job status to failed
       await updateProcessingJob(job.jobId, {
         status: 'failed',
         progress: 0,
         logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: `Conversion failed: ${error.message}` }])
       });
 
-      // Update file history with error
       await updateFileHistory(job.fileHistoryId, {
         status: 'failed',
         error_message: error.message
