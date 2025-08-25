@@ -162,6 +162,16 @@ function HistoryPanel({ historyItems, onDownload, onReprocess, onDelete }) {
                       </span>
                     )}
                     
+                    {item.downloadUrl && item.status === 'completed' && (
+                      <a
+                        href={item.downloadUrl}
+                        download
+                        className="px-3 py-1 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors"
+                      >
+                        📥 Download Converted File
+                      </a>
+                    )}
+                    
                     <div className="flex space-x-2">
                       <button
                         onClick={() => onDownload && onDownload(item)}

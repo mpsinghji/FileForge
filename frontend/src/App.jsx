@@ -37,13 +37,13 @@ function App() {
         let result;
         switch (operationType) {
           case 'conversion':
-            result = await api.convertFile(file, options.targetFormat, options.applyOCR);
+            result = await api.convertFile(file, options.targetFormat);
             break;
           case 'compression':
             result = await api.compressFile(file, options.compressionLevel, options.quality, options.removeMetadata);
             break;
           case 'extraction':
-            result = await api.extractText(file, options.mode, options.outputFormat, options.includeMetadata, options.language);
+            result = await api.extractText(file, options.mode, options.includeMetadata, options.language);
             break;
           default:
             throw new Error(`Unknown operation type: ${operationType}`);
@@ -52,14 +52,24 @@ function App() {
         setProgressPercent(((i + 1) / files.length) * 100);
         setLogs(prev => [...prev, `✅ Successfully processed: ${file.name}`]);
         
-        // Add to history
+        if (result) {
+          setLogs(prev => [...prev, `📁 Converted file: ${result.filename || result.outputPath || 'Unknown'}`]);
+          setLogs(prev => [...prev, `📊 File size: ${result.size || result.outputSize ? ((result.size || result.outputSize) / 1024).toFixed(1) : 'Unknown'} KB`]);
+        } else {
+          setLogs(prev => [...prev, `❌ No conversion result received`]);
+        }
+        
+        setLogs(prev => [...prev, `🔗 Download available in History tab`]);
+        
+        // Add to history with download link
         setHistoryItems(prev => [...prev, {
           id: Date.now() + i,
           filename: file.name,
           operation: operationType,
           status: 'completed',
           timestamp: new Date().toISOString(),
-          result: result
+          result: result,
+          downloadUrl: `http://localhost:3000/api/upload/download/${encodeURIComponent(result.path)}`
         }]);
       }
 
@@ -76,6 +86,27 @@ function App() {
     setFiles([]);
     setProgressPercent(0);
     setLogs([]);
+  };
+
+  const handleDownload = async (item) => {
+    if (item.downloadUrl) {
+      try {
+        const response = await fetch(item.downloadUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = item.result?.filename || `converted_${item.filename}`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }
+      } catch (error) {
+        console.error('Download failed:', error);
+      }
+    }
   };
 
   const renderActivePanel = () => {
@@ -130,12 +161,12 @@ function App() {
         );
       case 'history':
         return (
-          <HistoryPanel
-            historyItems={historyItems}
-            onDownload={() => {}}
-            onReprocess={() => {}}
-            onDelete={() => {}}
-          />
+                  <HistoryPanel 
+          historyItems={historyItems} 
+          onDownload={handleDownload} 
+          onReprocess={() => {}} 
+          onDelete={() => {}}
+        />
         );
       case 'settings':
         return <SettingsPanel />;

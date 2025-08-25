@@ -26,7 +26,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, 'config/config.env') });
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Security middleware
 app.use(helmet({
@@ -113,10 +113,15 @@ app.use(errorHandler);
 // Initialize database and start server
 async function startServer() {
   try {
+    console.log('🔄 Starting server initialization...');
+    
     // Setup database
+    console.log('🔄 Setting up database...');
     await setupDatabase();
+    console.log('✅ Database setup completed');
     
     // Create necessary directories
+    console.log('🔄 Creating directories...');
     const fs = await import('fs');
     const dirs = ['uploads', 'processed', 'temp'];
     
@@ -126,12 +131,21 @@ async function startServer() {
         fs.mkdirSync(dirPath, { recursive: true });
       }
     }
+    console.log('✅ Directories created');
     
-    app.listen(PORT, () => {
+    console.log('🔄 Starting HTTP server...');
+    const server = app.listen(PORT, () => {
       console.log(`🚀 FileForge Backend Server running on port ${PORT}`);
       console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
     });
+    
+    server.on('error', (error) => {
+      console.error('❌ Server error:', error);
+      process.exit(1);
+    });
+    
+    console.log('✅ HTTP server started');
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);

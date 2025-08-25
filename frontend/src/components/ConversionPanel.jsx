@@ -4,15 +4,12 @@ import ProgressStatus from './ProgressStatus';
 
 function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs, onProcess, onReset }) {
 	const [convertFormat, setConvertFormat] = useState('');
-	const [quality, setQuality] = useState('high');
-	const [applyOCR, setApplyOCR] = useState(false);
 
 	const allFormats = [
 		{ value: 'jpg', label: 'JPG (Image)', icon: '🖼️', type: 'image' },
 		{ value: 'png', label: 'PNG (Image)', icon: '🖼️', type: 'image' },
 		{ value: 'webp', label: 'WebP (Image)', icon: '🖼️', type: 'image' },
 		{ value: 'gif', label: 'GIF (Image)', icon: '🖼️', type: 'image' },
-		{ value: 'bmp', label: 'BMP (Image)', icon: '🖼️', type: 'image' },
 		{ value: 'tiff', label: 'TIFF (Image)', icon: '🖼️', type: 'image' },
 		{ value: 'mp4', label: 'MP4 (Video)', icon: '🎥', type: 'video' },
 		{ value: 'avi', label: 'AVI (Video)', icon: '🎥', type: 'video' },
@@ -30,7 +27,6 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 		{ value: 'txt', label: 'TXT (Text)', icon: '📝', type: 'document' },
 	];
 
-	// Function to get file type
 	const getFileType = (file) => {
 		if (file.type.startsWith('image/')) return 'image';
 		if (file.type.startsWith('video/')) return 'video';
@@ -39,29 +35,28 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 		return 'unknown';
 	};
 
-	// Filter formats based on uploaded files
 	const getAvailableFormats = () => {
 		if (files.length === 0) return [];
 		
 		const fileTypes = files.map(getFileType);
 		const uniqueTypes = [...new Set(fileTypes)];
 		
-		// If all files are the same type, show only that type's formats
 		if (uniqueTypes.length === 1) {
-			return allFormats.filter(format => format.type === uniqueTypes[0]);
+			const fileType = uniqueTypes[0];
+			
+			if (fileType === 'document' && files.some(f => f.name.toLowerCase().endsWith('.pdf'))) {
+				return allFormats.filter(format => format.type === 'image');
+			}
+			
+			return allFormats.filter(format => format.type === fileType);
 		}
 		
-		// If mixed file types, show all formats
 		return allFormats;
 	};
 
 	const availableFormats = getAvailableFormats();
 
-	const qualityOptions = [
-		{ value: 'low', label: 'Low', description: 'Smaller file size' },
-		{ value: 'medium', label: 'Medium', description: 'Balanced quality' },
-		{ value: 'high', label: 'High', description: 'Best quality' },
-	];
+
 
 	const canProcess = files.length > 0 && convertFormat !== '';
 
@@ -116,44 +111,9 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 							</div>
 						</div>
 
-						<div className="mb-6">
-							<label className="block text-sm font-medium text-gray-700 mb-3">
-								Quality Settings
-							</label>
-							<div className="space-y-2">
-								{qualityOptions.map((option) => (
-									<label key={option.value} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer">
-										<input
-											type="radio"
-											name="quality"
-											value={option.value}
-											checked={quality === option.value}
-											onChange={(e) => setQuality(e.target.value)}
-											className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
-										/>
-										<div>
-											<div className="font-medium text-gray-800">{option.label}</div>
-											<div className="text-sm text-gray-500">{option.description}</div>
-										</div>
-									</label>
-								))}
-							</div>
-						</div>
 
-						<div className="mb-6">
-							<label className="flex items-center space-x-3 cursor-pointer">
-								<input
-									type="checkbox"
-									checked={applyOCR}
-									onChange={(e) => setApplyOCR(e.target.checked)}
-									className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-								/>
-								<div>
-									<div className="font-medium text-gray-800">Apply OCR (Optical Character Recognition)</div>
-									<div className="text-sm text-gray-500">Extract text from images and scanned documents</div>
-								</div>
-							</label>
-						</div>
+
+
 					</div>
 				</div>
 
@@ -164,9 +124,7 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 						<div className="space-y-4">
 							<button
 								onClick={() => onProcess('conversion', {
-									targetFormat: convertFormat,
-									quality: quality,
-									applyOCR: applyOCR
+									targetFormat: convertFormat
 								})}
 								disabled={!canProcess || isProcessing}
 								className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all duration-200 ${

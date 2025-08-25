@@ -1,7 +1,7 @@
 import express from 'express';
 import { uploadMultiple, handleUploadError } from '../middleware/upload.mjs';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
-import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, addFileMetadata, getFileHistoryById } from '../utils/database.mjs';
+import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, addFileMetadata, getFileHistoryById, getFileHistory, getProcessingJob } from '../utils/database.mjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
@@ -19,7 +19,6 @@ router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (r
 
   const { 
     extractionMode = 'auto', 
-    outputFormat = 'txt', 
     includeMetadata = false,
     language = 'auto' 
   } = req.body;
@@ -30,15 +29,6 @@ router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (r
     return res.status(400).json({
       success: false,
       error: 'Invalid extraction mode. Must be one of: auto, ocr, native, hybrid'
-    });
-  }
-
-  // Validate output format
-  const validFormats = ['txt', 'docx', 'pdf', 'json'];
-  if (!validFormats.includes(outputFormat)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid output format. Must be one of: txt, docx, pdf, json'
     });
   }
 
@@ -53,7 +43,7 @@ router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (r
       operation_type: 'extraction',
       operation_details: {
         extractionMode,
-        outputFormat,
+        outputFormat: 'txt',
         includeMetadata,
         language,
         mimetype: file.mimetype,
@@ -73,12 +63,12 @@ router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (r
       fileHistoryId,
       originalFile: file.originalname,
       extractionMode,
-      outputFormat
+      outputFormat: 'txt'
     });
   }
 
   // Start extraction process in background
-  processExtraction(jobId, extractionJobs, extractionMode, outputFormat, includeMetadata, language);
+  processExtraction(jobId, extractionJobs, extractionMode, includeMetadata, language);
 
   res.status(200).json({
     success: true,
@@ -87,7 +77,7 @@ router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (r
       jobId,
       totalFiles: extractionJobs.length,
       extractionMode,
-      outputFormat,
+      outputFormat: 'txt',
       includeMetadata,
       language,
       jobs: extractionJobs.map(job => ({
@@ -269,7 +259,7 @@ router.get('/stats', asyncHandler(async (req, res) => {
 }));
 
 // Background extraction processing function
-async function processExtraction(mainJobId, extractionJobs, extractionMode, outputFormat, includeMetadata, language) {
+async function processExtraction(mainJobId, extractionJobs, extractionMode, includeMetadata, language) {
   const { extractText } = await import('../services/extractionService.mjs');
 
   for (const job of extractionJobs) {
@@ -288,7 +278,6 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, outp
       const result = await extractText(
         fileHistory.original_path,
         extractionMode,
-        outputFormat,
         includeMetadata,
         language,
         (progress, log) => {

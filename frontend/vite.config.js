@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
-    open: true, // Automatically open browser
-    host: true, // Allow external connections
+    open: false,
+    host: true, 
   },
 })
