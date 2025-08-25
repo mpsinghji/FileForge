@@ -33,11 +33,7 @@ function TextExtractionPanel({ files, setFiles, isProcessing, progressPercent, l
 						
 						<div className="space-y-4">
 							<button
-								onClick={() => onProcess('extraction', {
-									mode: 'auto',
-									includeMetadata: false,
-									language: 'auto'
-								})}
+								onClick={() => onProcess('extraction', {})}
 								disabled={!canProcess || isProcessing}
 								className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all duration-200 ${
 									canProcess && !isProcessing

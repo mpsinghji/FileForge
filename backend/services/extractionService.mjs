@@ -13,9 +13,7 @@ export async function extractText(inputPath, extractionMode = 'auto', includeMet
   const outputFilename = `${uuidv4()}-${Date.now()}-extracted.txt`;
   const outputPath = path.join('processed', outputFilename);
 
-  console.log(`[EXTRACTION DEBUG] Starting extraction for: ${inputPath}`);
-  console.log(`[EXTRACTION DEBUG] File extension: ${inputExt}`);
-  console.log(`[EXTRACTION DEBUG] Requested mode: ${extractionMode}`);
+  
 
   try {
     if (progressCallback) progressCallback(10, 'Analyzing file for text extraction...');
@@ -24,7 +22,7 @@ export async function extractText(inputPath, extractionMode = 'auto', includeMet
     const actualExtractionMode = extractionMode === 'auto' ? 
       determineExtractionMode(inputExt) : extractionMode;
     
-    console.log(`[EXTRACTION DEBUG] Determined mode: ${actualExtractionMode}`);
+    
 
     let extractedText = '';
     let metadata = {};
@@ -32,22 +30,19 @@ export async function extractText(inputPath, extractionMode = 'auto', includeMet
     // Extract text based on mode
     switch (actualExtractionMode) {
       case 'ocr':
-        console.log(`[EXTRACTION DEBUG] Using OCR mode`);
         extractedText = await performOCR(inputPath, language, progressCallback);
         break;
       case 'native':
-        console.log(`[EXTRACTION DEBUG] Using native mode`);
         extractedText = await extractNativeText(inputPath, progressCallback);
         break;
       case 'hybrid':
-        console.log(`[EXTRACTION DEBUG] Using hybrid mode`);
         extractedText = await performHybridExtraction(inputPath, language, progressCallback);
         break;
       default:
         throw new Error(`Unsupported extraction mode: ${actualExtractionMode}`);
     }
 
-    console.log(`[EXTRACTION DEBUG] Extracted text length: ${extractedText.length}`);
+    
 
     if (progressCallback) progressCallback(80, 'Formatting extracted text...');
 
@@ -62,7 +57,7 @@ export async function extractText(inputPath, extractionMode = 'auto', includeMet
 
     if (progressCallback) progressCallback(100, 'Text extraction completed');
 
-    console.log(`[EXTRACTION DEBUG] Extraction completed successfully in ${processingTime}s`);
+    
 
     return {
       filename: outputFilename,
@@ -76,7 +71,7 @@ export async function extractText(inputPath, extractionMode = 'auto', includeMet
     };
 
   } catch (error) {
-    console.error(`[EXTRACTION DEBUG] Extraction failed:`, error);
+    
     // Clean up output file if it exists
     if (fs.existsSync(outputPath)) {
       fs.unlinkSync(outputPath);
@@ -186,8 +181,6 @@ async function extractNativeText(inputPath, progressCallback) {
 }
 
 async function performHybridExtraction(inputPath, language, progressCallback) {
-  console.log(`[EXTRACTION DEBUG] Starting hybrid extraction for: ${inputPath}`);
-  
   if (progressCallback) progressCallback(20, 'Starting hybrid extraction...');
 
   let nativeText = '';
@@ -197,27 +190,23 @@ async function performHybridExtraction(inputPath, language, progressCallback) {
   try {
     // Try native extraction first
     if (progressCallback) progressCallback(25, 'Attempting native text extraction...');
-    console.log(`[EXTRACTION DEBUG] Attempting native extraction...`);
     nativeText = await extractNativeText(inputPath, (progress, message) => {
       if (progressCallback) progressCallback(25 + (progress * 0.25), `Native: ${message}`);
     });
-    console.log(`[EXTRACTION DEBUG] Native extraction result length: ${nativeText.length}`);
   } catch (error) {
-    console.log(`[EXTRACTION DEBUG] Native extraction failed:`, error.message);
+    
     extractionErrors.push(`Native extraction failed: ${error.message}`);
   }
 
   // If native extraction didn't yield much text, use OCR
   if (!nativeText || nativeText.trim().length < 50) {
     if (progressCallback) progressCallback(50, 'Native extraction yielded little text, using OCR...');
-    console.log(`[EXTRACTION DEBUG] Native extraction yielded little text, using OCR...`);
     try {
       ocrText = await performOCR(inputPath, language, (progress, message) => {
         if (progressCallback) progressCallback(50 + (progress * 0.4), `OCR: ${message}`);
       });
-      console.log(`[EXTRACTION DEBUG] OCR extraction result length: ${ocrText.length}`);
     } catch (error) {
-      console.log(`[EXTRACTION DEBUG] OCR extraction failed:`, error.message);
+      
       extractionErrors.push(`OCR extraction failed: ${error.message}`);
     }
   }
@@ -233,8 +222,6 @@ async function performHybridExtraction(inputPath, language, progressCallback) {
     if (combinedText) combinedText += '\n\n--- OCR Results ---\n\n';
     combinedText += ocrText;
   }
-
-  console.log(`[EXTRACTION DEBUG] Combined text length: ${combinedText.length}`);
 
   // If both methods failed, provide helpful error information
   if (!combinedText.trim()) {
@@ -308,27 +295,17 @@ async function preprocessImageForOCR(inputPath) {
 }
 
 async function extractTextFromPdf(inputPath, progressCallback) {
-  console.log(`[EXTRACTION DEBUG] Starting PDF extraction for: ${inputPath}`);
-  
   if (progressCallback) progressCallback(40, 'Extracting text from PDF...');
   
   try {
     // Read the PDF file
-    console.log(`[EXTRACTION DEBUG] Reading PDF file...`);
     const dataBuffer = fs.readFileSync(inputPath);
-    console.log(`[EXTRACTION DEBUG] PDF file size: ${dataBuffer.length} bytes`);
     
     // Parse the PDF
-    console.log(`[EXTRACTION DEBUG] Parsing PDF with pdf-parse...`);
     const data = await pdfParse(dataBuffer);
-    console.log(`[EXTRACTION DEBUG] PDF parsed successfully`);
-    console.log(`[EXTRACTION DEBUG] PDF info:`, data.info);
-    console.log(`[EXTRACTION DEBUG] PDF pages: ${data.numpages}`);
     
     // Extract text content
     let extractedText = data.text;
-    console.log(`[EXTRACTION DEBUG] Raw extracted text length: ${extractedText.length}`);
-    console.log(`[EXTRACTION DEBUG] First 200 characters:`, extractedText.substring(0, 200));
     
     // Add metadata if available
     if (data.info) {
@@ -344,7 +321,6 @@ async function extractTextFromPdf(inputPath, progressCallback) {
         textLength: extractedText.length
       };
       
-      console.log(`[EXTRACTION DEBUG] PDF metadata:`, metadata);
       
       // Add metadata to the extracted text
       extractedText = `=== PDF METADATA ===

@@ -52,12 +52,12 @@ export const compressFile = async (file, compressionLevel = 6, quality = 'high',
 };
 
 
-export const extractText = async (file, mode = 'auto', includeMetadata = true, language = 'eng') => {
+export const extractText = async (file) => {
   const formData = new FormData();
   formData.append('files', file); 
-  formData.append('mode', mode);
-  formData.append('includeMetadata', includeMetadata);
-  formData.append('language', language);
+  formData.append('mode', 'auto');
+  formData.append('includeMetadata', false);
+  formData.append('language', 'auto');
 
   const response = await fetch(`${API_BASE_URL}/extraction/extract`, {
     method: 'POST',

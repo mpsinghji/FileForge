@@ -17,11 +17,9 @@ router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (r
     });
   }
 
-  const { 
-    extractionMode = 'auto', 
-    includeMetadata = false,
-    language = 'auto' 
-  } = req.body;
+  const { mode, includeMetadata, language } = req.body;
+  const extractionMode = (mode || 'auto');
+  const withMetadata = String(includeMetadata) === 'true' || includeMetadata === true;
 
   // Validate extraction mode
   const validModes = ['auto', 'ocr', 'native', 'hybrid'];
@@ -44,8 +42,8 @@ router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (r
       operation_details: {
         extractionMode,
         outputFormat: 'txt',
-        includeMetadata,
-        language,
+        includeMetadata: withMetadata,
+        language: language || 'auto',
         mimetype: file.mimetype,
         size: file.size
       },
@@ -68,7 +66,7 @@ router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (r
   }
 
   // Start extraction process in background
-  processExtraction(jobId, extractionJobs, extractionMode, includeMetadata, language);
+  processExtraction(jobId, extractionJobs, extractionMode, withMetadata, language || 'auto');
 
   res.status(200).json({
     success: true,
