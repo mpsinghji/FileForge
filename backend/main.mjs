@@ -8,7 +8,6 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.join(__dirname, "config/config.env") });
 
-// Enable hot reload in development
 (async () => {
   if (process.env.NODE_ENV !== "production") {
     try {
@@ -23,47 +22,42 @@ dotenv.config({ path: path.join(__dirname, "config/config.env") });
 })();
 
 function createWindow() {
-  // Create the browser window
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1200,
     minHeight: 800,
     title: "FileForge - File Processing App",
-    icon: path.join(__dirname, "assets/icon.png"), // Optional: add an icon
+    icon: path.join(__dirname, "assets/icon.png"),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
       webSecurity: true
     },
-    show: false, // Don't show until ready
+    show: false,
     titleBarStyle: 'default',
     autoHideMenuBar: false
   });
 
-  // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     mainWindow.focus();
   });
 
-  // Load the frontend URL
+
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
   mainWindow.loadURL(frontendUrl);
 
-  // Open DevTools in development
+  
   if (process.env.NODE_ENV === "development" || process.argv.includes("--dev")) {
     mainWindow.webContents.openDevTools();
   }
 
-  // Handle window closed
   mainWindow.on('closed', () => {
-    // Dereference the window object
     mainWindow = null;
   });
 
-  // Handle external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     return { action: 'deny' };
   });
@@ -71,7 +65,6 @@ function createWindow() {
   return mainWindow;
 }
 
-// Create menu template
 const template = [
   {
     label: 'File',
@@ -127,16 +120,12 @@ const template = [
   }
 ];
 
-// This method will be called when Electron has finished initialization
 app.whenReady().then(() => {
-  // Create the main window
   createWindow();
 
-  // Set up the menu
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 
-  // On macOS, re-create window when dock icon is clicked
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -144,14 +133,12 @@ app.whenReady().then(() => {
   });
 });
 
-// Quit when all windows are closed, except on macOS
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-// Security: Prevent new window creation
 app.on('web-contents-created', (event, contents) => {
   contents.on('new-window', (event, navigationUrl) => {
     event.preventDefault();

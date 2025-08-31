@@ -1,14 +1,15 @@
 import express from 'express';
 import { uploadSingle, uploadMultiple, handleUploadError } from '../middleware/upload.mjs';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
-import { addFileHistory } from '../utils/database.mjs';
+import { authenticateToken } from '../middleware/auth.mjs';
+import { addFileHistory } from '../services/databaseService.js';
 import path from 'path';
 import fs from 'fs';
 
 const router = express.Router();
 
 // Single file upload
-router.post('/single', uploadSingle, handleUploadError, asyncHandler(async (req, res) => {
+router.post('/single', authenticateToken, uploadSingle, handleUploadError, asyncHandler(async (req, res) => {
   if (!req.file) {
     return res.status(400).json({
       success: false,
@@ -26,7 +27,8 @@ router.post('/single', uploadSingle, handleUploadError, asyncHandler(async (req,
       size: file.size,
       encoding: file.encoding
     },
-    file_size: file.size
+    file_size: file.size,
+    user_id: req.user.userId
   };
 
   // Add to database
@@ -47,7 +49,7 @@ router.post('/single', uploadSingle, handleUploadError, asyncHandler(async (req,
 }));
 
 // Multiple files upload
-router.post('/multiple', uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
+router.post('/multiple', authenticateToken, uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({
       success: false,
@@ -68,7 +70,8 @@ router.post('/multiple', uploadMultiple, handleUploadError, asyncHandler(async (
         size: file.size,
         encoding: file.encoding
       },
-      file_size: file.size
+      file_size: file.size,
+      user_id: req.user.userId
     };
 
     // Add to database
@@ -97,7 +100,7 @@ router.post('/multiple', uploadMultiple, handleUploadError, asyncHandler(async (
 }));
 
 // Get file info
-router.get('/info/:filename', asyncHandler(async (req, res) => {
+router.get('/info/:filename', authenticateToken, asyncHandler(async (req, res) => {
   const { filename } = req.params;
   const filePath = path.join('uploads', filename);
 
@@ -151,7 +154,7 @@ router.delete('/:filename', asyncHandler(async (req, res) => {
 }));
 
 // List uploaded files
-router.get('/list', asyncHandler(async (req, res) => {
+router.get('/list', authenticateToken, asyncHandler(async (req, res) => {
   const { limit = 50, offset = 0 } = req.query;
   const uploadsDir = 'uploads';
 
@@ -203,7 +206,7 @@ router.get('/list', asyncHandler(async (req, res) => {
 }));
 
 // Get upload statistics
-router.get('/stats', asyncHandler(async (req, res) => {
+router.get('/stats', authenticateToken, asyncHandler(async (req, res) => {
   const uploadsDir = 'uploads';
 
   if (!fs.existsSync(uploadsDir)) {

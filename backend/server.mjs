@@ -8,33 +8,29 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Import routes
 import uploadRoutes from './routes/upload.mjs';
 import conversionRoutes from './routes/conversion.mjs';
 import compressionRoutes from './routes/compression.mjs';
 import extractionRoutes from './routes/extraction.mjs';
 import historyRoutes from './routes/history.mjs';
+import authRoutes from './routes/auth.mjs';
 
-// Import middleware
 import { errorHandler } from './middleware/errorHandler.mjs';
-import { setupDatabase } from './utils/database.mjs';
+import connectdb from './utils/db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables
 dotenv.config({ path: path.join(__dirname, 'config/config.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Security middleware
 app.use(helmet({
   crossOriginEmbedderPolicy: false,
   contentSecurityPolicy: false
 }));
 
-// CORS configuration
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
@@ -42,31 +38,26 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api/', limiter);
+// Temporarily disabled rate limiting for debugging
+// const limiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, 
+//   max: 100, 
+//   message: 'Too many requests from this IP, please try again later.',
+//   standardHeaders: true,
+//   legacyHeaders: false,
+// });
+// app.use('/api/', limiter);
 
-// Body parsing middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Compression middleware
 app.use(compression());
 
-// Logging middleware
 app.use(morgan('combined'));
 
-// Static file serving
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/processed', express.static(path.join(__dirname, 'processed')));
 
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
@@ -76,14 +67,13 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API routes
+app.use('/api/auth', authRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/conversion', conversionRoutes);
 app.use('/api/compression', compressionRoutes);
 app.use('/api/extraction', extractionRoutes);
 app.use('/api/history', historyRoutes);
 
-// Root endpoint
 app.get('/', (req, res) => {
   res.json({
     message: 'FileForge Backend API',
@@ -98,7 +88,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Endpoint not found',
@@ -107,20 +96,16 @@ app.use('*', (req, res) => {
   });
 });
 
-// Error handling middleware
 app.use(errorHandler);
 
-// Initialize database and start server
 async function startServer() {
   try {
     console.log('🔄 Starting server initialization...');
     
-    // Setup database
-    console.log('🔄 Setting up database...');
-    await setupDatabase();
-    console.log('✅ Database setup completed');
+    console.log('🔄 Connecting to MongoDB...');
+    await connectdb();
+    console.log('✅ MongoDB connection established');
     
-    // Create necessary directories
     console.log('🔄 Creating directories...');
     const fs = await import('fs');
     const dirs = ['uploads', 'processed', 'temp'];

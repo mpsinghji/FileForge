@@ -1,15 +1,17 @@
 import express from 'express';
 import { uploadMultiple, handleUploadError } from '../middleware/upload.mjs';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
-import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, addFileMetadata, getFileHistoryById, getFileHistory, getProcessingJob } from '../utils/database.mjs';
+import { authenticateToken } from '../middleware/auth.mjs';
+import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById, getFileHistory, getProcessingJob } from '../services/databaseService.js';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
+import { extractArchive } from '../services/archiveExtractionService.mjs';
 
 const router = express.Router();
 
 // Text extraction endpoint
-router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
+router.post('/extract', authenticateToken, uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({
       success: false,
@@ -47,7 +49,8 @@ router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (r
         mimetype: file.mimetype,
         size: file.size
       },
-      file_size: file.size
+      file_size: file.size,
+      user_id: req.user.userId
     });
 
     await addProcessingJob({
@@ -89,7 +92,7 @@ router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (r
 }));
 
 // Get extraction status
-router.get('/status/:jobId', asyncHandler(async (req, res) => {
+router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) => {
   const { jobId } = req.params;
   const job = await getProcessingJob(jobId);
 
@@ -119,7 +122,7 @@ router.get('/status/:jobId', asyncHandler(async (req, res) => {
 }));
 
 // Get extraction modes info
-router.get('/modes', asyncHandler(async (req, res) => {
+router.get('/modes', authenticateToken, asyncHandler(async (req, res) => {
   const extractionModes = [
     {
       value: 'auto',
@@ -158,7 +161,7 @@ router.get('/modes', asyncHandler(async (req, res) => {
 }));
 
 // Get supported languages
-router.get('/languages', asyncHandler(async (req, res) => {
+router.get('/languages', authenticateToken, asyncHandler(async (req, res) => {
   const languages = [
     { value: 'auto', label: 'Auto Detect', description: 'Automatically detect language' },
     { value: 'en', label: 'English', description: 'English text recognition' },
@@ -180,9 +183,9 @@ router.get('/languages', asyncHandler(async (req, res) => {
 }));
 
 // Get extraction history
-router.get('/history', asyncHandler(async (req, res) => {
+router.get('/history', authenticateToken, asyncHandler(async (req, res) => {
   const { limit = 20, offset = 0 } = req.query;
-  const history = await getFileHistory(parseInt(limit), parseInt(offset), 'extraction');
+  const history = await getFileHistory(parseInt(limit), parseInt(offset), 'extraction', req.user.userId);
 
   res.status(200).json({
     success: true,
@@ -196,8 +199,8 @@ router.get('/history', asyncHandler(async (req, res) => {
 }));
 
 // Get extraction statistics
-router.get('/stats', asyncHandler(async (req, res) => {
-  const history = await getFileHistory(1000, 0, 'extraction');
+router.get('/stats', authenticateToken, asyncHandler(async (req, res) => {
+  const history = await getFileHistory(1000, 0, 'extraction', req.user.userId);
   
   const completedExtractions = history.filter(item => item.status === 'completed');
   
@@ -328,3 +331,29 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
 }
 
 export default router;
+
+// Archive extraction endpoint
+router.post('/archive', authenticateToken, uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ success: false, error: 'No archives uploaded' });
+  }
+
+  const { extractPath = 'extracted', overwriteExisting = false } = req.body;
+
+  const results = [];
+  for (const file of req.files) {
+    const r = await extractArchive(
+      file.path,
+      {
+        extractPath,
+        overwriteExisting: String(overwriteExisting) === 'true' || overwriteExisting === true,
+      },
+      (progress, message) => {
+        // no-op for now, could stream logs later
+      }
+    );
+    results.push({ original: file.originalname, ...r });
+  }
+
+  res.status(200).json({ success: true, data: { results } });
+}));

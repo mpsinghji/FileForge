@@ -1,18 +1,19 @@
 import express from 'express';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
+import { authenticateToken } from '../middleware/auth.mjs';
 import { 
   getFileHistory, 
   getFileHistoryById, 
-  getFileMetadata, 
-  cleanupOldFiles 
-} from '../utils/database.mjs';
+  cleanupOldFiles,
+  deleteFileHistory
+} from '../services/databaseService.js';
 import path from 'path';
 import fs from 'fs';
 
 const router = express.Router();
 
-// Get all processing history
-router.get('/', asyncHandler(async (req, res) => {
+// Get all processing history for the authenticated user
+router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   const { 
     limit = 50, 
     offset = 0, 
@@ -22,7 +23,8 @@ router.get('/', asyncHandler(async (req, res) => {
     end_date = null
   } = req.query;
 
-  let history = await getFileHistory(parseInt(limit), parseInt(offset), operation_type);
+  // Always filter by user_id for security
+  let history = await getFileHistory(parseInt(limit), parseInt(offset), operation_type, req.user.userId);
 
   // Filter by status if provided
   if (status) {
@@ -32,7 +34,7 @@ router.get('/', asyncHandler(async (req, res) => {
   // Filter by date range if provided
   if (start_date || end_date) {
     history = history.filter(item => {
-      const itemDate = new Date(item.created_at);
+      const itemDate = new Date(item.createdAt);
       const start = start_date ? new Date(start_date) : null;
       const end = end_date ? new Date(end_date) : null;
 
@@ -54,7 +56,10 @@ router.get('/', asyncHandler(async (req, res) => {
       compressionRatio: null,
       processingTimeFormatted: null,
       fileSizeFormatted: null,
-      processedSizeFormatted: null
+      processedSizeFormatted: null,
+      // Add file URLs for direct access
+      originalFileUrl: `/uploads/${path.basename(item.original_path)}`,
+      processedFileUrl: item.processed_path ? `/processed/${path.basename(item.processed_path)}` : null
     };
 
     // Calculate compression ratio for compression operations
@@ -93,10 +98,10 @@ router.get('/', asyncHandler(async (req, res) => {
   });
 }));
 
-// Get specific file history by ID
-router.get('/:id', asyncHandler(async (req, res) => {
+// Get specific file history by ID (user-specific)
+router.get('/:id', authenticateToken, asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const fileHistory = await getFileHistoryById(parseInt(id));
+  const fileHistory = await getFileHistoryById(id);
 
   if (!fileHistory) {
     return res.status(404).json({
@@ -105,8 +110,13 @@ router.get('/:id', asyncHandler(async (req, res) => {
     });
   }
 
-  // Get metadata if available
-  const metadata = await getFileMetadata(parseInt(id));
+  // Security check: ensure user can only access their own files
+  if (fileHistory.user_id.toString() !== req.user.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied'
+    });
+  }
 
   // Calculate metrics
   const metrics = {
@@ -115,9 +125,9 @@ router.get('/:id', asyncHandler(async (req, res) => {
     processingTimeFormatted: null,
     fileSizeFormatted: formatFileSize(fileHistory.file_size),
     processedSizeFormatted: fileHistory.processed_size ? formatFileSize(fileHistory.processed_size) : null,
-    downloadUrl: fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null,
-    originalUrl: `/uploads/${path.basename(fileHistory.original_path)}`,
-    metadata
+    // Add direct file URLs
+    originalFileUrl: `/uploads/${path.basename(fileHistory.original_path)}`,
+    processedFileUrl: fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null
   };
 
   if (fileHistory.operation_type === 'compression' && fileHistory.processed_size) {
@@ -134,18 +144,63 @@ router.get('/:id', asyncHandler(async (req, res) => {
   });
 }));
 
-// Get processing statistics
-router.get('/stats/overview', asyncHandler(async (req, res) => {
+// Delete file history and local files
+router.delete('/:id', authenticateToken, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const fileHistory = await getFileHistoryById(id);
+
+  if (!fileHistory) {
+    return res.status(404).json({
+      success: false,
+      error: 'File history not found'
+    });
+  }
+
+  // Security check: ensure user can only delete their own files
+  if (fileHistory.user_id.toString() !== req.user.userId) {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied'
+    });
+  }
+
+  try {
+    // Delete local files first
+    if (fileHistory.original_path && fs.existsSync(fileHistory.original_path)) {
+      fs.unlinkSync(fileHistory.original_path);
+    }
+    if (fileHistory.processed_path && fs.existsSync(fileHistory.processed_path)) {
+      fs.unlinkSync(fileHistory.processed_path);
+    }
+
+    // Delete from MongoDB
+    await deleteFileHistory(id);
+
+    res.status(200).json({
+      success: true,
+      message: 'File and history deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete file'
+    });
+  }
+}));
+
+// Get processing statistics for the authenticated user
+router.get('/stats/overview', authenticateToken, asyncHandler(async (req, res) => {
   const { start_date = null, end_date = null } = req.query;
 
-  // Get all history for statistics
-  const allHistory = await getFileHistory(10000, 0);
+  // Get all history for the authenticated user
+  const allHistory = await getFileHistory(10000, 0, null, req.user.userId);
 
   // Filter by date range if provided
   let filteredHistory = allHistory;
   if (start_date || end_date) {
     filteredHistory = allHistory.filter(item => {
-      const itemDate = new Date(item.created_at);
+      const itemDate = new Date(item.createdAt);
       const start = start_date ? new Date(start_date) : null;
       const end = end_date ? new Date(end_date) : null;
 
@@ -222,14 +277,14 @@ router.get('/stats/overview', asyncHandler(async (req, res) => {
 
   // Recent activity (last 10 items)
   stats.recentActivity = filteredHistory
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 10)
     .map(item => ({
-      id: item.id,
+      id: item._id,
       operation_type: item.operation_type,
       original_filename: item.original_filename,
       status: item.status,
-      created_at: item.created_at,
+      createdAt: item.createdAt,
       file_size: formatFileSize(item.file_size)
     }));
 
@@ -244,18 +299,18 @@ router.get('/stats/overview', asyncHandler(async (req, res) => {
   });
 }));
 
-// Get operation-specific statistics
-router.get('/stats/:operationType', asyncHandler(async (req, res) => {
+// Get operation-specific statistics for the authenticated user
+router.get('/stats/:operationType', authenticateToken, asyncHandler(async (req, res) => {
   const { operationType } = req.params;
   const { start_date = null, end_date = null } = req.query;
 
-  const history = await getFileHistory(10000, 0, operationType);
+  const history = await getFileHistory(10000, 0, operationType, req.user.userId);
 
   // Filter by date range if provided
   let filteredHistory = history;
   if (start_date || end_date) {
     filteredHistory = history.filter(item => {
-      const itemDate = new Date(item.created_at);
+      const itemDate = new Date(item.createdAt);
       const start = start_date ? new Date(start_date) : null;
       const end = end_date ? new Date(end_date) : null;
 
@@ -314,10 +369,10 @@ router.get('/stats/:operationType', asyncHandler(async (req, res) => {
   });
 }));
 
-// Cleanup old files
-router.delete('/cleanup', asyncHandler(async (req, res) => {
+// Cleanup old files for the authenticated user
+router.delete('/cleanup', authenticateToken, asyncHandler(async (req, res) => {
   const { days = 7 } = req.query;
-  const deletedCount = await cleanupOldFiles(parseInt(days));
+  const deletedCount = await cleanupOldFiles(parseInt(days), req.user.userId);
 
   res.status(200).json({
     success: true,

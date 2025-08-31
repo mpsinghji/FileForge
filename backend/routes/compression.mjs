@@ -1,7 +1,8 @@
 import express from 'express';
 import { uploadMultiple, handleUploadError } from '../middleware/upload.mjs';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
-import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById } from '../utils/database.mjs';
+import { authenticateToken } from '../middleware/auth.mjs';
+import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById } from '../services/databaseService.js';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
@@ -9,7 +10,7 @@ import fs from 'fs';
 const router = express.Router();
 
 // File compression endpoint
-router.post('/compress', uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
+router.post('/compress', authenticateToken, uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({
       success: false,
@@ -48,7 +49,8 @@ router.post('/compress', uploadMultiple, handleUploadError, asyncHandler(async (
         mimetype: file.mimetype,
         size: file.size
       },
-      file_size: file.size
+      file_size: file.size,
+      user_id: req.user.userId
     });
 
     await addProcessingJob({
@@ -87,7 +89,7 @@ router.post('/compress', uploadMultiple, handleUploadError, asyncHandler(async (
 }));
 
 // Get compression status
-router.get('/status/:jobId', asyncHandler(async (req, res) => {
+router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) => {
   const { jobId } = req.params;
   const job = await getProcessingJob(jobId);
 
@@ -119,7 +121,7 @@ router.get('/status/:jobId', asyncHandler(async (req, res) => {
 }));
 
 // Get compression levels info
-router.get('/levels', asyncHandler(async (req, res) => {
+router.get('/levels', authenticateToken, asyncHandler(async (req, res) => {
   const compressionLevels = [
     {
       value: 'light',
@@ -162,7 +164,7 @@ router.get('/levels', asyncHandler(async (req, res) => {
 }));
 
 // Get compression history
-router.get('/history', asyncHandler(async (req, res) => {
+router.get('/history', authenticateToken, asyncHandler(async (req, res) => {
   const { limit = 20, offset = 0 } = req.query;
   const history = await getFileHistory(parseInt(limit), parseInt(offset), 'compression');
 
@@ -185,7 +187,7 @@ router.get('/history', asyncHandler(async (req, res) => {
 }));
 
 // Get compression statistics
-router.get('/stats', asyncHandler(async (req, res) => {
+router.get('/stats', authenticateToken, asyncHandler(async (req, res) => {
   const history = await getFileHistory(1000, 0, 'compression');
   
   const completedCompressions = history.filter(item => item.status === 'completed' && item.processed_size);

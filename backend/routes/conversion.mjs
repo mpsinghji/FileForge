@@ -1,7 +1,8 @@
 import express from 'express';
 import { uploadMultiple, handleUploadError } from '../middleware/upload.mjs';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
-import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById } from '../utils/database.mjs';
+import { authenticateToken } from '../middleware/auth.mjs';
+import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById } from '../services/databaseService.js';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
@@ -9,7 +10,7 @@ import fs from 'fs';
 const router = express.Router();
 
 // File conversion endpoint
-router.post('/convert', uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
+router.post('/convert', authenticateToken, uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({
       success: false,
@@ -58,7 +59,8 @@ router.post('/convert', uploadMultiple, handleUploadError, asyncHandler(async (r
         mimetype: file.mimetype,
         size: file.size
       },
-      file_size: file.size
+      file_size: file.size,
+      user_id: req.user.userId
     });
 
     await addProcessingJob({
@@ -95,7 +97,7 @@ router.post('/convert', uploadMultiple, handleUploadError, asyncHandler(async (r
 }));
 
 // Get conversion status
-router.get('/status/:jobId', asyncHandler(async (req, res) => {
+router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) => {
   const { jobId } = req.params;
   const job = await getProcessingJob(jobId);
 
@@ -123,7 +125,7 @@ router.get('/status/:jobId', asyncHandler(async (req, res) => {
 }));
 
 // Get supported formats
-router.get('/formats', asyncHandler(async (req, res) => {
+router.get('/formats', authenticateToken, asyncHandler(async (req, res) => {
   const supportedFormats = {
     images: {
       formats: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff'],
@@ -150,7 +152,7 @@ router.get('/formats', asyncHandler(async (req, res) => {
 }));
 
 // Get conversion history
-router.get('/history', asyncHandler(async (req, res) => {
+router.get('/history', authenticateToken, asyncHandler(async (req, res) => {
   const { limit = 20, offset = 0 } = req.query;
   const history = await getFileHistory(parseInt(limit), parseInt(offset), 'conversion');
 
