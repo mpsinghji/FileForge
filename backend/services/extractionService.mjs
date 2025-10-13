@@ -88,6 +88,7 @@ async function performOCR(inputPath, language, progressCallback) {
 
   if (progressCallback) progressCallback(30, 'Running OCR...');
 
+  let worker = null;
   try {
     // Determine the best language for OCR
     let ocrLanguage = 'eng'; // Default to English
@@ -95,27 +96,45 @@ async function performOCR(inputPath, language, progressCallback) {
       ocrLanguage = language;
     }
 
-    // Use dedicated worker to avoid DataCloneError and improve stability on Node
-    const worker = await createWorker({
-      cacheMethod: 'none'
+    // Use a more robust approach with timeout and proper cleanup
+    const ocrPromise = new Promise(async (resolve, reject) => {
+      try {
+        // Create worker with timeout
+        worker = await createWorker({
+          cacheMethod: 'none',
+          logger: () => {} // Disable logging to prevent crashes
+        });
+        
+        await worker.load();
+        await worker.loadLanguage(ocrLanguage);
+        await worker.initialize(ocrLanguage);
+        
+        // Set parameters with error handling
+        try {
+          await worker.setParameters({
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:()[]{}\'"`~@#$%^&*+=|\\/<>-_',
+            preserve_interword_spaces: '1',
+            user_defined_dpi: '300',
+            tessedit_ocr_engine_mode: '3',
+            tessedit_pageseg_mode: '6'
+          });
+        } catch (paramError) {
+          console.warn('Parameter setting failed, continuing with defaults:', paramError.message);
+        }
+        
+        const result = await worker.recognize(processedImagePath);
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
     });
-    await worker.load();
-    await worker.loadLanguage(ocrLanguage);
-    await worker.initialize(ocrLanguage);
-    await worker.setParameters({
-      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:()[]{}\'"`~@#$%^&*+=|\\/<>-_',
-      preserve_interword_spaces: '1',
-      user_defined_dpi: '300',
-      tessedit_ocr_engine_mode: '3',
-      tessedit_pageseg_mode: '6'
-    });
-    const result = await worker.recognize(processedImagePath);
-    await worker.terminate();
 
-    // Clean up processed image
-    if (fs.existsSync(processedImagePath)) {
-      fs.unlinkSync(processedImagePath);
-    }
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('OCR timeout after 60 seconds')), 60000);
+    });
+
+    const result = await Promise.race([ocrPromise, timeoutPromise]);
 
     // Post-process the extracted text for better quality
     let extractedText = result.data.text;
@@ -130,11 +149,25 @@ async function performOCR(inputPath, language, progressCallback) {
 
     return extractedText;
   } catch (error) {
-    // Clean up processed image
-    if (fs.existsSync(processedImagePath)) {
-      fs.unlinkSync(processedImagePath);
-    }
+    console.error('OCR processing error:', error);
     throw new Error(`OCR failed: ${error.message}`);
+  } finally {
+    // Always clean up worker and processed image
+    try {
+      if (worker) {
+        await worker.terminate();
+      }
+    } catch (cleanupError) {
+      console.warn('Worker cleanup failed:', cleanupError.message);
+    }
+    
+    try {
+      if (fs.existsSync(processedImagePath)) {
+        fs.unlinkSync(processedImagePath);
+      }
+    } catch (cleanupError) {
+      console.warn('File cleanup failed:', cleanupError.message);
+    }
   }
 }
 

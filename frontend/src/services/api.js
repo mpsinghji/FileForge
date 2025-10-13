@@ -1,8 +1,17 @@
+import { useAuth } from '../store/useAuth';
+
 const API_BASE_URL = '/api';
 
-// Get auth token from localStorage
-const getAuthToken = () => localStorage.getItem('authToken');
-const getRefreshToken = () => localStorage.getItem('refreshToken');
+// Get auth token from Zustand store
+const getAuthToken = () => {
+  const state = useAuth.getState();
+  return state.accessToken;
+};
+
+const getRefreshToken = () => {
+  const state = useAuth.getState();
+  return state.refreshToken;
+};
 
 // Add auth header to requests
 const getAuthHeaders = () => {
@@ -35,8 +44,11 @@ const refreshTokens = async () => {
     if (!res.ok) return null;
     const data = await res.json();
     if (data?.success && data?.data?.accessToken) {
-      localStorage.setItem('authToken', data.data.accessToken);
-      if (data.data.refreshToken) localStorage.setItem('refreshToken', data.data.refreshToken);
+      // Update Zustand store instead of localStorage
+      useAuth.getState().updateTokens({
+        accessToken: data.data.accessToken,
+        refreshToken: data.data.refreshToken || refreshToken
+      });
       return data.data.accessToken;
     }
     return null;

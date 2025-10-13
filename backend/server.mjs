@@ -185,5 +185,26 @@ startServer();
 process.on('unhandledRejection', (reason) => {
   try {
     console.error('Unhandled promise rejection:', reason);
+    logger.error('Unhandled promise rejection:', reason);
   } catch {}
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  try {
+    console.error('Uncaught exception:', error);
+    logger.error('Uncaught exception:', error);
+    // Don't exit immediately, let the process handle it gracefully
+  } catch {}
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  process.exit(0);
 });

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useDarkMode } from '../App';
+import { useAuth } from '../store/useAuth';
 import * as api from '../services/api';
 
 function AuthModal({ isOpen, onClose, onAuthSuccess }) {
@@ -13,6 +14,7 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const { darkMode } = useDarkMode();
+  const { login: loginStore, setLoading, setError } = useAuth();
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -66,12 +68,17 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       }
 
       if (response.success) {
-        // Store tokens in localStorage
-        const accessToken = response.data.accessToken || response.data.token;
-        const refreshToken = response.data.refreshToken;
-        if (accessToken) localStorage.setItem('authToken', accessToken);
-        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
+        // Store tokens and user data in Zustand store (persistent)
+        const accessToken = response.data.token?.accessToken || response.data.accessToken;
+        const refreshToken = response.data.token?.refreshToken || response.data.refreshToken;
+        const userData = response.data.user;
+        
+        if (accessToken && refreshToken && userData) {
+          loginStore(userData, {
+            accessToken,
+            refreshToken
+          });
+        }
         
         // Reset form
         setFormData({

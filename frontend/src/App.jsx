@@ -2,6 +2,7 @@ import React, { useState, useEffect, createContext, useContext } from 'react';
 import Sidebar from './components/Sidebar';
 import WorkspaceTabs from './components/WorkspaceTabs';
 import { useWorkspace } from './store/useWorkspace';
+import { useAuth } from './store/useAuth';
 import ConversionPanel from './components/ConversionPanel';
 import CompressionPanel from './components/CompressionPanel';
 import TextExtractionPanel from './components/TextExtractionPanel';
@@ -30,9 +31,8 @@ function App() {
   const [progressPercent, setProgressPercent] = useState(0);
   const [logs, setLogs] = useState([]);
   
-  // Authentication state
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null);
+  // Authentication state from persistent store
+  const { isAuthenticated, user, logout: logoutStore, checkAuth } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -121,39 +121,27 @@ function App() {
 
   // Authentication functions
   const checkAuthStatus = async () => {
-    const token = localStorage.getItem('authToken');
-    const savedUser = localStorage.getItem('user');
-    
-    if (token && savedUser) {
+    // Check if user is authenticated using persistent store
+    if (checkAuth()) {
       try {
         const response = await api.getProfile();
         if (response.success) {
-          setIsAuthenticated(true);
-          setUser(response.data.user);
+          // User is still valid, no need to update store as it's already persistent
+          console.log('User authenticated from persistent store');
         } else {
-          // Token is invalid, clear storage
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('user');
-          setIsAuthenticated(false);
-          setUser(null);
+          // Token is invalid, logout
+          logoutStore();
         }
       } catch (error) {
         console.error('Auth check failed:', error);
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('user');
-        setIsAuthenticated(false);
-        setUser(null);
+        logoutStore();
       }
-    } else {
-      setIsAuthenticated(false);
-      setUser(null);
     }
     setIsLoading(false);
   };
 
   const handleAuthSuccess = (authData) => {
-    setIsAuthenticated(true);
-    setUser(authData.user);
+    // Auth state is now managed by Zustand store, just close modal
     setShowAuthModal(false);
   };
 
@@ -163,10 +151,8 @@ function App() {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
-      setIsAuthenticated(false);
-      setUser(null);
+      // Logout is now handled by Zustand store
+      logoutStore();
     }
   };
 
