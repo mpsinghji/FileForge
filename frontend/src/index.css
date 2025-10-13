@@ -55,3 +55,41 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background: #2563eb;
 }
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #60a5fa;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #3b82f6;
+}
+
+/* File preview styling for dark mode */
+.dark audio {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+.dark video {
+  background-color: #374151;
+}
+
+/* File preview container styling */
+.file-preview-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.file-preview-container img,
+.file-preview-container video {
+  transition: transform 0.2s ease-in-out;
+}
+
+.file-preview-container:hover img,
+.file-preview-container:hover video {
+  transform: scale(1.05);
+}

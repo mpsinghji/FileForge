@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useDarkMode } from '../App';
 import FileUpload from './FileUpload';
 import ProgressStatus from './ProgressStatus';
 
 function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs, onProcess, onReset }) {
+	const { darkMode } = useDarkMode();
 	const [compressionLevel, setCompressionLevel] = useState('medium');
 	const [preserveQuality, setPreserveQuality] = useState(true);
 	const [removeMetadata, setRemoveMetadata] = useState(false);
@@ -18,30 +20,30 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 
 	return (
 		<div className="space-y-6">
-			<div className="bg-white rounded-2xl shadow-lg p-6">
+			<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 				<div className="flex items-center space-x-3 mb-4">
 					<div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-xl flex items-center justify-center">
 						<span className="text-white text-2xl">🗜️</span>
 					</div>
 					<div>
-						<h1 className="text-3xl font-bold text-gray-800">File Compression</h1>
-						<p className="text-gray-600">Reduce file sizes while maintaining quality</p>
+						<h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>File Compression</h1>
+						<p className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Reduce file sizes while maintaining quality</p>
 					</div>
 				</div>
 			</div>
 
 			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 				<div className="space-y-6">
-					<div className="bg-white rounded-2xl shadow-lg p-6">
-						<h2 className="text-xl font-semibold text-gray-800 mb-4">Upload Files</h2>
+					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Upload Files</h2>
 						<FileUpload files={files} setFiles={setFiles} />
 					</div>
 
-					<div className="bg-white rounded-2xl shadow-lg p-6">
-						<h2 className="text-xl font-semibold text-gray-800 mb-4">Compression Settings</h2>
+					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Compression Settings</h2>
 						
 						<div className="mb-6">
-							<label className="block text-sm font-medium text-gray-700 mb-3">
+							<label className={`block text-sm font-medium mb-3 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
 								Compression Level
 							</label>
 							<div className="space-y-3">
@@ -51,8 +53,12 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 										onClick={() => setCompressionLevel(level.value)}
 										className={`w-full p-4 rounded-xl border-2 transition-all duration-200 text-left ${
 											compressionLevel === level.value
-												? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-												: 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+												? darkMode 
+													? 'border-indigo-400 bg-indigo-900 text-indigo-200'
+													: 'border-indigo-500 bg-indigo-50 text-indigo-700'
+												: darkMode
+													? 'border-gray-600 hover:border-gray-500 hover:bg-gray-700 text-gray-200'
+													: 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
 										}`}
 									>
 										<div className="flex items-center justify-between">
@@ -64,12 +70,12 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 												}`}></div>
 												<div>
 													<div className="font-medium">{level.label}</div>
-													<div className="text-sm text-gray-500">{level.description}</div>
+													<div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{level.description}</div>
 												</div>
 											</div>
 											<div className="text-right">
 												<div className="text-sm font-medium text-indigo-600">{level.savings}</div>
-												<div className="text-xs text-gray-400">size reduction</div>
+												<div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-400'}`}>size reduction</div>
 											</div>
 										</div>
 									</button>
@@ -86,8 +92,8 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 									className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
 								/>
 								<div>
-									<div className="font-medium text-gray-800">Preserve Quality</div>
-									<div className="text-sm text-gray-500">Maintain original quality when possible</div>
+									<div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>Preserve Quality</div>
+									<div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Maintain original quality when possible</div>
 								</div>
 							</label>
 
@@ -99,8 +105,8 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 									className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
 								/>
 								<div>
-									<div className="font-medium text-gray-800">Remove Metadata</div>
-									<div className="text-sm text-gray-500">Strip EXIF data and other metadata for smaller files</div>
+									<div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>Remove Metadata</div>
+									<div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Strip EXIF data and other metadata for smaller files</div>
 								</div>
 							</label>
 						</div>
@@ -108,8 +114,8 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 				</div>
 
 				<div className="space-y-6">
-					<div className="bg-white rounded-2xl shadow-lg p-6">
-						<h2 className="text-xl font-semibold text-gray-800 mb-4">Process Controls</h2>
+					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Process Controls</h2>
 						
 						<div className="space-y-4">
 							<button
@@ -122,7 +128,9 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 								className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all duration-200 ${
 									canProcess && !isProcessing
 										? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:shadow-lg hover:scale-105'
-										: 'bg-gray-200 text-gray-400 cursor-not-allowed'
+										: darkMode 
+											? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+											: 'bg-gray-200 text-gray-400 cursor-not-allowed'
 								}`}
 							>
 								{isProcessing ? (
@@ -137,15 +145,23 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 
 							<button
 								onClick={onReset}
-								className="w-full py-3 px-6 rounded-xl font-medium text-gray-600 border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all duration-200"
+								className={`w-full py-3 px-6 rounded-xl font-medium border-2 transition-all duration-200 ${
+									darkMode 
+										? 'text-gray-300 border-gray-600 hover:border-gray-500 hover:bg-gray-700'
+										: 'text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+								}`}
 							>
 								Reset All
 							</button>
 						</div>
 
 						{files.length > 0 && (
-							<div className="mt-6 p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-200">
-								<h3 className="font-medium text-gray-800 mb-3">Compression Preview</h3>
+							<div className={`mt-6 p-4 rounded-xl border ${
+								darkMode 
+									? 'bg-gradient-to-r from-indigo-900 to-blue-900 border-indigo-700' 
+									: 'bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200'
+							}`}>
+								<h3 className={`font-medium mb-3 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Compression Preview</h3>
 								<div className="space-y-3">
 									{files.map((file, index) => {
 										const originalSize = (file.size / 1024 / 1024).toFixed(2);
@@ -155,17 +171,19 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 										const estimatedSize = (file.size * (100 - maxSavings) / 100 / 1024 / 1024).toFixed(2);
 										
 										return (
-											<div key={index} className="flex items-center justify-between p-3 bg-white rounded-lg">
+											<div key={index} className={`flex items-center justify-between p-3 rounded-lg ${
+												darkMode ? 'bg-gray-700' : 'bg-white'
+											}`}>
 												<div className="flex items-center space-x-3">
-													<span className="text-gray-500">📄</span>
+													<span className={darkMode ? 'text-gray-400' : 'text-gray-500'}>📄</span>
 													<div>
-														<div className="font-medium text-gray-700">{file.name}</div>
-														<div className="text-sm text-gray-500">{originalSize} MB → ~{estimatedSize} MB</div>
+														<div className={`font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>{file.name}</div>
+														<div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{originalSize} MB → ~{estimatedSize} MB</div>
 													</div>
 												</div>
 												<div className="text-right">
 													<div className="text-sm font-medium text-indigo-600">{savings}</div>
-													<div className="text-xs text-gray-400">reduction</div>
+													<div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-400'}`}>reduction</div>
 												</div>
 											</div>
 										);
@@ -175,8 +193,8 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 						)}
 					</div>
 
-					<div className="bg-white rounded-2xl shadow-lg p-6">
-						<h2 className="text-xl font-semibold text-gray-800 mb-4">Progress</h2>
+					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Progress</h2>
 						<ProgressStatus
 							progressPercent={progressPercent}
 							currentFile={files[0] || null}

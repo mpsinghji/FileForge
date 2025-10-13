@@ -5,7 +5,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 
 export const authenticateToken = asyncHandler(async (req, res, next) => {
   const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
     return res.status(401).json({
@@ -35,7 +35,6 @@ export const optionalAuth = asyncHandler(async (req, res, next) => {
       const decoded = jwt.verify(token, JWT_SECRET);
       req.user = decoded;
     } catch (error) {
-      // Token is invalid, but we don't block the request
       req.user = null;
     }
   } else {

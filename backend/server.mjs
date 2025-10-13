@@ -38,15 +38,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// Temporarily disabled rate limiting for debugging
-// const limiter = rateLimit({
-//   windowMs: 15 * 60 * 1000, 
-//   max: 100, 
-//   message: 'Too many requests from this IP, please try again later.',
-//   standardHeaders: true,
-//   legacyHeaders: false,
-// });
-// app.use('/api/', limiter);
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useDarkMode } from '../App';
 import FileUpload from './FileUpload';
 import ProgressStatus from './ProgressStatus';
 
 function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs, onProcess, onReset }) {
+	const { darkMode } = useDarkMode();
 	const [convertFormat, setConvertFormat] = useState('');
 
 	const allFormats = [
@@ -56,36 +58,34 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 
 	const availableFormats = getAvailableFormats();
 
-
-
 	const canProcess = files.length > 0 && convertFormat !== '';
 
 	return (
 		<div className="space-y-6">
-			<div className="bg-white rounded-2xl shadow-lg p-6">
+			<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 				<div className="flex items-center space-x-3 mb-4">
 					<div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-xl flex items-center justify-center">
 						<span className="text-white text-2xl">🔄</span>
 					</div>
 					<div>
-						<h1 className="text-3xl font-bold text-gray-800">File Conversion</h1>
-						<p className="text-gray-600">Convert your files to different formats with ease</p>
+						<h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>File Conversion</h1>
+						<p className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Convert your files to different formats with ease</p>
 					</div>
 				</div>
 			</div>
 
 			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 				<div className="space-y-6">
-					<div className="bg-white rounded-2xl shadow-lg p-6">
-						<h2 className="text-xl font-semibold text-gray-800 mb-4">Upload Files</h2>
+					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Upload Files</h2>
 						<FileUpload files={files} setFiles={setFiles} />
 					</div>
 
-					<div className="bg-white rounded-2xl shadow-lg p-6">
-						<h2 className="text-xl font-semibold text-gray-800 mb-4">Conversion Options</h2>
+					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Conversion Options</h2>
 						
 						<div className="mb-6">
-							<label className="block text-sm font-medium text-gray-700 mb-3">
+							<label className={`block text-sm font-medium mb-3 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
 								Target Format
 							</label>
 							<div className="grid grid-cols-2 gap-3">
@@ -95,31 +95,31 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 										onClick={() => setConvertFormat(format.value)}
 										className={`p-4 rounded-xl border-2 transition-all duration-200 text-left ${
 											convertFormat === format.value
-												? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-												: 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+												? darkMode 
+													? 'border-indigo-400 bg-indigo-900 text-indigo-200'
+													: 'border-indigo-500 bg-indigo-50 text-indigo-700'
+												: darkMode
+													? 'border-gray-600 hover:border-gray-500 hover:bg-gray-700 text-gray-200'
+													: 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
 										}`}
 									>
 										<div className="flex items-center space-x-3">
 											<span className="text-2xl">{format.icon}</span>
 											<div>
 												<div className="font-medium">{format.label}</div>
-												<div className="text-xs text-gray-500 uppercase">{format.value}</div>
+												<div className={`text-xs uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{format.value}</div>
 											</div>
 										</div>
 									</button>
 								))}
 							</div>
 						</div>
-
-
-
-
 					</div>
 				</div>
 
 				<div className="space-y-6">
-					<div className="bg-white rounded-2xl shadow-lg p-6">
-						<h2 className="text-xl font-semibold text-gray-800 mb-4">Process Controls</h2>
+					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Process Controls</h2>
 						
 						<div className="space-y-4">
 							<button
@@ -130,7 +130,9 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 								className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all duration-200 ${
 									canProcess && !isProcessing
 										? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:shadow-lg hover:scale-105'
-										: 'bg-gray-200 text-gray-400 cursor-not-allowed'
+										: darkMode 
+											? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+											: 'bg-gray-200 text-gray-400 cursor-not-allowed'
 								}`}
 							>
 								{isProcessing ? (
@@ -145,21 +147,25 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 
 							<button
 								onClick={onReset}
-								className="w-full py-3 px-6 rounded-xl font-medium text-gray-600 border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all duration-200"
+								className={`w-full py-3 px-6 rounded-xl font-medium border-2 transition-all duration-200 ${
+									darkMode 
+										? 'text-gray-300 border-gray-600 hover:border-gray-500 hover:bg-gray-700'
+										: 'text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+								}`}
 							>
 								Reset All
 							</button>
 						</div>
 
 						{files.length > 0 && (
-							<div className="mt-6 p-4 bg-gray-50 rounded-xl">
-								<h3 className="font-medium text-gray-800 mb-2">Selected Files</h3>
+							<div className={`mt-6 p-4 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+								<h3 className={`font-medium mb-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Selected Files</h3>
 								<div className="space-y-2">
 									{files.map((file, index) => (
 										<div key={index} className="flex items-center space-x-3 text-sm">
-											<span className="text-gray-500">📄</span>
-											<span className="text-gray-700">{file.name}</span>
-											<span className="text-gray-400">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+											<span className={darkMode ? 'text-gray-400' : 'text-gray-500'}>📄</span>
+											<span className={darkMode ? 'text-gray-200' : 'text-gray-700'}>{file.name}</span>
+											<span className={darkMode ? 'text-gray-500' : 'text-gray-400'}>({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
 										</div>
 									))}
 								</div>
@@ -167,8 +173,8 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 						)}
 					</div>
 
-					<div className="bg-white rounded-2xl shadow-lg p-6">
-						<h2 className="text-xl font-semibold text-gray-800 mb-4">Progress</h2>
+					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Progress</h2>
 						<ProgressStatus
 							progressPercent={progressPercent}
 							currentFile={files[0] || null}

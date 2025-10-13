@@ -1,6 +1,9 @@
 import React, { useEffect } from "react";
+import { useDarkMode } from '../App';
 
 function FileUpload({ files = [], setFiles }) {
+  const { darkMode } = useDarkMode();
+  
   const handleFileSelect = (e) => {
     const selected = Array.from(e.target.files);
     setFiles((prev) => {
@@ -64,15 +67,25 @@ function FileUpload({ files = [], setFiles }) {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-800 mb-2">Upload Your Files</h2>
+      <h2 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+        Upload Your Files
+      </h2>
 
       <div
         onDrop={handleDrop}
         onDragOver={(e) => e.preventDefault()}
-        className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition"
+        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition ${
+          darkMode 
+            ? 'border-gray-600 hover:border-blue-400 bg-gray-800' 
+            : 'border-gray-300 hover:border-blue-500'
+        }`}
       >
-        <p className="text-gray-500">Drag & Drop your files here</p>
-        <p className="text-sm text-gray-400 mt-1">or click to browse</p>
+        <p className={darkMode ? 'text-gray-300' : 'text-gray-500'}>
+          Drag & Drop your files here
+        </p>
+        <p className={`text-sm mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-400'}`}>
+          or click to browse
+        </p>
 
         <input
           type="file"
@@ -84,35 +97,71 @@ function FileUpload({ files = [], setFiles }) {
         />
         <label
           htmlFor="fileInput"
-          className="inline-block mt-3 px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700"
+          className="inline-block mt-3 px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 transition-colors"
         >
           Select Files
         </label>
       </div>
 
       {filesWithPreview.length > 0 && (
-        <ul className="mt-4 space-y-4 text-sm text-gray-700">
+        <ul className={`mt-4 space-y-4 text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
           {filesWithPreview.map((item, idx) => (
             <li
               key={item.file.name + "-" + item.file.size}
-              className="flex items-center space-x-4 bg-gray-100 p-2 rounded"
+              className={`flex items-center space-x-4 p-2 rounded ${
+                darkMode ? 'bg-gray-700 border border-gray-600' : 'bg-gray-100'
+              }`}
             >
               {item.file.type && item.file.type.startsWith("image/") && (
-                <img
-                  src={item.preview}
-                  alt={item.file.name}
-                  className="w-16 h-16 object-cover rounded"
-                />
+                <div className={`w-16 h-16 rounded border overflow-hidden file-preview-container ${
+                  darkMode ? 'border-gray-600 bg-gray-600' : 'border-gray-300 bg-gray-100'
+                }`}>
+                  <img
+                    src={item.preview}
+                    alt={item.file.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                  <div className={`w-full h-full flex items-center justify-center text-2xl ${
+                    darkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`} style={{ display: 'none' }}>
+                    🖼️
+                  </div>
+                </div>
               )}
               {item.file.type && item.file.type.startsWith("video/") && (
-                <video
-                  src={item.preview}
-                  controls
-                  className="w-24 h-16 rounded"
-                />
+                <div className={`w-24 h-16 rounded border overflow-hidden file-preview-container ${
+                  darkMode ? 'border-gray-600 bg-gray-600' : 'border-gray-300 bg-gray-100'
+                }`}>
+                  <video
+                    src={item.preview}
+                    controls
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                  <div className={`w-full h-full flex items-center justify-center text-2xl ${
+                    darkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`} style={{ display: 'none' }}>
+                    🎥
+                  </div>
+                </div>
               )}
               {item.file.type && item.file.type.startsWith("audio/") && (
-                <audio src={item.preview} controls className="w-40" />
+                <div className={`w-40 p-2 rounded border ${
+                  darkMode ? 'border-gray-600 bg-gray-600' : 'border-gray-300 bg-gray-100'
+                }`}>
+                  <audio 
+                    src={item.preview} 
+                    controls 
+                    className="w-full"
+                  />
+                </div>
               )}
               {!(
                 item.file.type &&
@@ -120,7 +169,9 @@ function FileUpload({ files = [], setFiles }) {
                   item.file.type.startsWith("video/") ||
                   item.file.type.startsWith("audio/"))
               ) && (
-                <div className="w-16 h-16 flex items-center justify-center bg-gray-300 text-gray-700 rounded">
+                <div className={`w-16 h-16 flex items-center justify-center rounded ${
+                  darkMode ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-700'
+                }`}>
                   📄
                 </div>
               )}
@@ -128,7 +179,7 @@ function FileUpload({ files = [], setFiles }) {
                 <p className="font-medium truncate">
                   {item.file.name || "Unnamed file"}
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   {item.file.size
                     ? (item.file.size / 1024).toFixed(1) + " KB"
                     : "0 KB"}
@@ -136,7 +187,7 @@ function FileUpload({ files = [], setFiles }) {
               </div>
               <button
                 onClick={() => removeFile(idx)}
-                className="text-red-500 hover:text-red-700 text-lg"
+                className="text-red-500 hover:text-red-700 text-lg transition-colors"
                 aria-label={`Remove ${item.file.name}`}
               >
                 &times;

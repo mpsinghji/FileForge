@@ -6,23 +6,26 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load environment variables
 dotenv.config({ path: path.join(__dirname, "config/config.env") });
 
-(async () => {
-  if (process.env.NODE_ENV !== "production") {
+// ✅ Enable electron-reloader in development
+if (process.env.NODE_ENV === "development") {
+  (async () => {
     try {
-      const reloader = await import("electron-reloader");
-      reloader.default(import.meta.url, {
-        hardResetMethod: "exit",
-      });
+      const { default: reloader } = await import("electron-reloader");
+      reloader(import.meta.url, { hardResetMethod: "exit" });
+      console.log("✅ Electron reloader active");
     } catch (error) {
-      console.log("Electron reloader not available in production");
+      console.log("⚠️ Electron reloader failed:", error);
     }
-  }
-})();
+  })();
+}
+
+let mainWindow;
 
 function createWindow() {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1200,
@@ -36,30 +39,28 @@ function createWindow() {
       webSecurity: true
     },
     show: false,
-    titleBarStyle: 'default',
+    titleBarStyle: "default",
     autoHideMenuBar: false
   });
 
-  mainWindow.once('ready-to-show', () => {
+  mainWindow.once("ready-to-show", () => {
     mainWindow.show();
     mainWindow.focus();
   });
 
-
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
   mainWindow.loadURL(frontendUrl);
 
-  
   if (process.env.NODE_ENV === "development" || process.argv.includes("--dev")) {
     mainWindow.webContents.openDevTools();
   }
 
-  mainWindow.on('closed', () => {
+  mainWindow.on("closed", () => {
     mainWindow = null;
   });
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    return { action: 'deny' };
+  mainWindow.webContents.setWindowOpenHandler(() => {
+    return { action: "deny" };
   });
 
   return mainWindow;
@@ -67,19 +68,19 @@ function createWindow() {
 
 const template = [
   {
-    label: 'File',
+    label: "File",
     submenu: [
       {
-        label: 'New Window',
-        accelerator: 'CmdOrCtrl+N',
+        label: "New Window",
+        accelerator: "CmdOrCtrl+N",
         click: () => {
           createWindow();
         }
       },
-      { type: 'separator' },
+      { type: "separator" },
       {
-        label: 'Quit',
-        accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
+        label: "Quit",
+        accelerator: process.platform === "darwin" ? "Cmd+Q" : "Ctrl+Q",
         click: () => {
           app.quit();
         }
@@ -87,36 +88,33 @@ const template = [
     ]
   },
   {
-    label: 'Edit',
+    label: "Edit",
     submenu: [
-      { role: 'undo' },
-      { role: 'redo' },
-      { type: 'separator' },
-      { role: 'cut' },
-      { role: 'copy' },
-      { role: 'paste' }
+      { role: "undo" },
+      { role: "redo" },
+      { type: "separator" },
+      { role: "cut" },
+      { role: "copy" },
+      { role: "paste" }
     ]
   },
   {
-    label: 'View',
+    label: "View",
     submenu: [
-      { role: 'reload' },
-      { role: 'forceReload' },
-      { role: 'toggleDevTools' },
-      { type: 'separator' },
-      { role: 'resetZoom' },
-      { role: 'zoomIn' },
-      { role: 'zoomOut' },
-      { type: 'separator' },
-      { role: 'togglefullscreen' }
+      { role: "reload" },
+      { role: "forceReload" },
+      { role: "toggleDevTools" },
+      { type: "separator" },
+      { role: "resetZoom" },
+      { role: "zoomIn" },
+      { role: "zoomOut" },
+      { type: "separator" },
+      { role: "togglefullscreen" }
     ]
   },
   {
-    label: 'Window',
-    submenu: [
-      { role: 'minimize' },
-      { role: 'close' }
-    ]
+    label: "Window",
+    submenu: [{ role: "minimize" }, { role: "close" }]
   }
 ];
 
@@ -126,21 +124,21 @@ app.whenReady().then(() => {
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 
-  app.on('activate', () => {
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
-app.on('web-contents-created', (event, contents) => {
-  contents.on('new-window', (event, navigationUrl) => {
+app.on("web-contents-created", (event, contents) => {
+  contents.on("new-window", (event) => {
     event.preventDefault();
   });
 });

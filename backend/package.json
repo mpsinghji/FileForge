@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server.mjs",
     "dev": "nodemon server.mjs",
-    "electron": "electron .",
+    "electron": "cross-env NODE_ENV=development electron .",
     "electron-dev": "electron . --dev",
     "app": "concurrently \"npm run start\" \"npm run electron\"",
     "app-dev": "concurrently \"npm run dev\" \"npm run electron-dev\"",
