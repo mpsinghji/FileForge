@@ -4,11 +4,32 @@ import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
 import { createUser, findUserByEmail, findUserByUsername, findUserById } from '../services/databaseService.js';
+import User from '../models/User.js';
 
 const router = express.Router();
 
-// JWT secret key (in production, this should be in environment variables)
+// JWT secrets (in production, use env and stronger secrets)
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const REFRESH_SECRET = process.env.REFRESH_SECRET || 'your-refresh-secret-change-in-production';
+
+const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || '15m';
+const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_TTL || '30d';
+
+function signAccessToken(user) {
+  return jwt.sign(
+    { userId: user._id, email: user.email, username: user.username },
+    JWT_SECRET,
+    { expiresIn: ACCESS_TOKEN_TTL }
+  );
+}
+
+function signRefreshToken(user) {
+  return jwt.sign(
+    { userId: user._id, tokenVersion: user.token_version },
+    REFRESH_SECRET,
+    { expiresIn: REFRESH_TOKEN_TTL }
+  );
+}
 
 // Validation middleware
 const validateSignup = [
@@ -65,12 +86,9 @@ router.post('/signup', validateSignup, asyncHandler(async (req, res) => {
       password_hash: hashedPassword
     });
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user._id, email, username },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    // Generate tokens
+    const accessToken = signAccessToken(user);
+    const refreshToken = signRefreshToken(user);
 
     res.status(201).json({
       success: true,
@@ -81,7 +99,8 @@ router.post('/signup', validateSignup, asyncHandler(async (req, res) => {
           username: user.username,
           email: user.email
         },
-        token
+        accessToken,
+        refreshToken
       }
     });
   } catch (error) {
@@ -126,12 +145,9 @@ router.post('/login', validateLogin, asyncHandler(async (req, res) => {
       });
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user._id, email: user.email, username: user.username },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    // Generate tokens
+    const accessToken = signAccessToken(user);
+    const refreshToken = signRefreshToken(user);
 
     res.status(200).json({
       success: true,
@@ -142,7 +158,8 @@ router.post('/login', validateLogin, asyncHandler(async (req, res) => {
           username: user.username,
           email: user.email
         },
-        token
+        accessToken,
+        refreshToken
       }
     });
   } catch (error) {
@@ -156,6 +173,20 @@ router.post('/login', validateLogin, asyncHandler(async (req, res) => {
 
 // Logout endpoint (client-side token removal)
 router.post('/logout', asyncHandler(async (req, res) => {
+  // If a refresh token is provided, bump token_version to invalidate future refreshes
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, REFRESH_SECRET);
+        await User.findByIdAndUpdate(decoded.userId, { $inc: { token_version: 1 } });
+      } catch (_) {
+        // ignore invalid token on logout
+      }
+    }
+  } catch (_) {}
+
   res.status(200).json({
     success: true,
     message: 'Logout successful'
@@ -201,6 +232,42 @@ router.get('/profile', asyncHandler(async (req, res) => {
       success: false,
       error: 'Invalid token'
     });
+  }
+}));
+
+// Refresh token endpoint
+router.post('/refresh', asyncHandler(async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ success: false, error: 'Refresh token required' });
+  }
+
+  try {
+    const payload = jwt.verify(refreshToken, REFRESH_SECRET);
+    const user = await findUserById(payload.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    // Check token version for rotation/invalidation
+    if (typeof payload.tokenVersion !== 'number' || payload.tokenVersion !== user.token_version) {
+      return res.status(401).json({ success: false, error: 'Invalid refresh token' });
+    }
+
+    // Rotate: bump version
+    await User.findByIdAndUpdate(user._id, { $inc: { token_version: 1 } });
+    const updated = await findUserById(user._id);
+
+    const newAccessToken = signAccessToken(updated);
+    const newRefreshToken = signRefreshToken(updated);
+
+    return res.status(200).json({
+      success: true,
+      data: { accessToken: newAccessToken, refreshToken: newRefreshToken }
+    });
+  } catch (error) {
+    return res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
   }
 }));
 

@@ -3,6 +3,8 @@ import { uploadMultiple, handleUploadError } from '../middleware/upload.mjs';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
 import { authenticateToken } from '../middleware/auth.mjs';
 import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById } from '../services/databaseService.js';
+import { estimateConvertedSize } from '../services/compressionService.mjs';
+import { runWithConcurrency } from '../services/queue.mjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
@@ -151,6 +153,40 @@ router.get('/formats', authenticateToken, asyncHandler(async (req, res) => {
   });
 }));
 
+// Presets and size estimate
+router.post('/estimate', authenticateToken, asyncHandler(async (req, res) => {
+  const { kind, quality = 'medium', sizeBytes = 0 } = req.body;
+  const estimated = estimateConvertedSize(Number(sizeBytes || 0), kind, quality);
+  const presets = {
+    video: [
+      { name: 'Web MP4 (H.264)', options: ['-c:v libx264','-preset medium','-crf 23','-c:a aac','-b:a 128k'] },
+      { name: 'High Quality', options: ['-c:v libx264','-preset slow','-crf 18','-c:a aac','-b:a 192k'] }
+    ],
+    audio: [
+      { name: 'Standard MP3', options: ['-c:a mp3','-b:a 128k'] },
+      { name: 'High MP3', options: ['-c:a mp3','-b:a 192k'] }
+    ],
+    image: [
+      { name: 'WebP Balanced', options: ['webpQuality=80','webpEffort=4'] },
+      { name: 'JPEG High', options: ['jpegQuality=90'] }
+    ]
+  };
+  res.status(200).json({ success: true, data: { estimatedSize: estimated, presets } });
+}));
+
+// Smart suggestions based on filename/extension
+router.post('/suggest', authenticateToken, asyncHandler(async (req, res) => {
+  const { filename = '', mimetype = '', sizeBytes = 0 } = req.body;
+  const lower = String(filename).toLowerCase();
+  const suggestions = [];
+  if (lower.endsWith('.mov')) suggestions.push({ reason: 'Better compatibility', target: 'mp4' });
+  if (lower.endsWith('.heic')) suggestions.push({ reason: 'Web sharing', target: 'jpg' });
+  if (lower.endsWith('.wav')) suggestions.push({ reason: 'Smaller size', target: 'mp3' });
+  if (lower.endsWith('.bmp')) suggestions.push({ reason: 'Web optimized', target: 'png' });
+  const estimatedMp4 = estimateConvertedSize(Number(sizeBytes || 0), 'video', 'medium');
+  res.status(200).json({ success: true, data: { suggestions, estimates: { mp4: estimatedMp4 } } });
+}));
+
 // Get conversion history
 router.get('/history', authenticateToken, asyncHandler(async (req, res) => {
   const { limit = 20, offset = 0 } = req.query;
@@ -170,58 +206,21 @@ router.get('/history', authenticateToken, asyncHandler(async (req, res) => {
 // Background conversion processing function
 async function processConversion(mainJobId, conversionJobs, targetFormat) {
   const { convertFile } = await import('../services/conversionService.mjs');
-
-  for (const job of conversionJobs) {
+  const concurrency = parseInt(process.env.CONCURRENCY || '2');
+  await runWithConcurrency(conversionJobs, async (job) => {
     try {
-      await updateProcessingJob(job.jobId, {
-        status: 'processing',
-        progress: 0,
-        logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Starting conversion...' }])
-      });
-
+      await updateProcessingJob(job.jobId, { status: 'processing', progress: 0, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Starting conversion...' }]) });
       const fileHistory = await getFileHistoryById(job.fileHistoryId);
-      
-      const result = await convertFile(
-        fileHistory.original_path,
-        targetFormat,
-        (progress, log) => {
-          updateProcessingJob(job.jobId, {
-            status: 'processing',
-            progress,
-            logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: log }])
-          });
-        }
-      );
-
-      await updateFileHistory(job.fileHistoryId, {
-        processed_filename: result.filename,
-        processed_path: result.path,
-        processed_size: result.size,
-        processing_time: result.processingTime,
-        status: 'completed'
+      const result = await convertFile(fileHistory.original_path, targetFormat, (progress, log) => {
+        updateProcessingJob(job.jobId, { status: 'processing', progress, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: log }]) });
       });
-
-      await updateProcessingJob(job.jobId, {
-        status: 'completed',
-        progress: 100,
-        logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Conversion completed successfully' }])
-      });
-
+      await updateFileHistory(job.fileHistoryId, { processed_filename: result.filename, processed_path: result.path, processed_size: result.size, processing_time: result.processingTime, status: 'completed' });
+      await updateProcessingJob(job.jobId, { status: 'completed', progress: 100, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Conversion completed successfully' }]) });
     } catch (error) {
-      console.error(`Conversion failed for job ${job.jobId}:`, error);
-
-      await updateProcessingJob(job.jobId, {
-        status: 'failed',
-        progress: 0,
-        logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: `Conversion failed: ${error.message}` }])
-      });
-
-      await updateFileHistory(job.fileHistoryId, {
-        status: 'failed',
-        error_message: error.message
-      });
+      await updateProcessingJob(job.jobId, { status: 'failed', progress: 0, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: `Conversion failed: ${error.message}` }]) });
+      await updateFileHistory(job.fileHistoryId, { status: 'failed', error_message: error.message });
     }
-  }
+  }, concurrency);
 }
 
 export default router;

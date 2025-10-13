@@ -111,8 +111,8 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Process Controls</h2>
 						
 						<div className="space-y-4">
-							<button
-								onClick={onProcess}
+					<button
+						onClick={() => onProcess('archive-extraction', { extractPath, overwriteExisting, password: extractPassword })}
 								disabled={!canProcess || isProcessing}
 								className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all duration-200 ${
 									canProcess && !isProcessing

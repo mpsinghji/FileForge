@@ -2,10 +2,13 @@ import React, { useState } from 'react';
 import { useDarkMode } from '../App';
 import FileUpload from './FileUpload';
 import ProgressStatus from './ProgressStatus';
+import * as api from '../services/api';
 
 function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs, onProcess, onReset }) {
 	const { darkMode } = useDarkMode();
-	const [convertFormat, setConvertFormat] = useState('');
+  const [convertFormat, setConvertFormat] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [estimate, setEstimate] = useState(null);
 
 	const allFormats = [
 		{ value: 'jpg', label: 'JPG (Image)', icon: '🖼️', type: 'image' },
@@ -56,7 +59,19 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 		return allFormats;
 	};
 
-	const availableFormats = getAvailableFormats();
+  const availableFormats = getAvailableFormats();
+
+  const handleFilesAdded = async (added) => {
+    if (!added || added.length === 0) return;
+    try {
+      const f = added[0];
+      const resp = await api.suggestFormats({ filename: f.name, mimetype: f.type, sizeBytes: f.size });
+      if (resp.success) {
+        setSuggestions(resp.data.suggestions || []);
+        setEstimate(resp.data.estimates || null);
+      }
+    } catch (_) {}
+  };
 
 	const canProcess = files.length > 0 && convertFormat !== '';
 
@@ -78,7 +93,7 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 				<div className="space-y-6">
 					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Upload Files</h2>
-						<FileUpload files={files} setFiles={setFiles} />
+            <FileUpload files={files} setFiles={setFiles} onFilesAdded={handleFilesAdded} />
 					</div>
 
 					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
@@ -108,7 +123,25 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 											<div>
 												<div className="font-medium">{format.label}</div>
 												<div className={`text-xs uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{format.value}</div>
-											</div>
+          </div>
+
+          {(suggestions.length > 0 || estimate) && (
+            <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+              <h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Suggestions</h2>
+              {suggestions.length > 0 && (
+                <ul className={`mb-3 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                  {suggestions.map((s, i) => (
+                    <li key={i}>👉 {s.reason}: Try {s.target.toUpperCase()}</li>
+                  ))}
+                </ul>
+              )}
+              {estimate && (
+                <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Estimated MP4 size: {estimate.mp4 ? (estimate.mp4/1024/1024).toFixed(2) : '-'} MB
+                </div>
+              )}
+            </div>
+          )}
 										</div>
 									</button>
 								))}

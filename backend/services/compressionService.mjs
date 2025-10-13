@@ -4,6 +4,8 @@ import archiver from 'archiver';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
+import { execa } from 'execa';
+import sevenBin from '7zip-bin';
 
 // Configure ffmpeg path
 import ffmpegStatic from 'ffmpeg-static';
@@ -430,4 +432,56 @@ async function createCompressedArchive(inputPath, outputPath, compressionLevel, 
   archive.pipe(output);
   archive.append(fs.createReadStream(inputPath), { name: path.basename(inputPath) });
   archive.finalize();
+}
+
+export async function createArchiveFromFiles(inputPaths, outputFormat = 'zip', compressionLevel = 'medium', archiveName = null, password = null, progressCallback) {
+  if (!Array.isArray(inputPaths) || inputPaths.length === 0) {
+    throw new Error('No input files provided for archiving');
+  }
+
+  const startTime = Date.now();
+  const outBase = archiveName || `${uuidv4()}-${Date.now()}`;
+  const ext = outputFormat.toLowerCase() === '7z' ? '7z' : 'zip';
+  const outputPath = path.join('processed', `${outBase}.${ext}`);
+
+  if (!fs.existsSync('processed')) fs.mkdirSync('processed', { recursive: true });
+
+  const sevenPath = sevenBin.path7za;
+  const args = ['a', outputPath, ...inputPaths];
+  const levelMap = { light: '1', medium: '5', high: '7', extreme: '9' };
+  const lvl = levelMap[compressionLevel] || '5';
+  args.push(`-mx=${lvl}`);
+  if (ext === '7z') {
+    args.push('-t7z');
+  } else {
+    args.push('-tzip');
+  }
+  if (password) {
+    args.push(`-p${password}`);
+    if (ext === '7z') {
+      args.push('-mhe=on');
+    }
+  }
+
+  if (progressCallback) progressCallback(20, 'Creating archive...');
+  try {
+    await execa(sevenPath, args);
+    if (progressCallback) progressCallback(100, 'Archive created');
+    const size = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
+    return { filename: path.basename(outputPath), path: outputPath, size, processingTime: (Date.now() - startTime) / 1000 };
+  } catch (err) {
+    throw new Error(`Archive creation failed: ${err.shortMessage || err.message}`);
+  }
+}
+
+export function estimateConvertedSize(bytes, kind = 'video', quality = 'medium') {
+  const map = {
+    image: { low: 0.35, medium: 0.55, high: 0.75 },
+    audio: { low: 0.4, medium: 0.6, high: 0.8 },
+    video: { low: 0.2, medium: 0.4, high: 0.6 },
+    document: { low: 0.6, medium: 0.8, high: 1.0 }
+  };
+  const q = ['low', 'medium', 'high'].includes(quality) ? quality : 'medium';
+  const k = map[kind] ? kind : 'document';
+  return Math.max(1024, Math.floor(bytes * map[k][q]));
 }

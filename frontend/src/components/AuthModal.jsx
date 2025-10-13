@@ -66,8 +66,11 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       }
 
       if (response.success) {
-        // Store token in localStorage
-        localStorage.setItem('authToken', response.data.token);
+        // Store tokens in localStorage
+        const accessToken = response.data.accessToken || response.data.token;
+        const refreshToken = response.data.refreshToken;
+        if (accessToken) localStorage.setItem('authToken', accessToken);
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(response.data.user));
         
         // Reset form

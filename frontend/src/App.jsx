@@ -1,5 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import Sidebar from './components/Sidebar';
+import WorkspaceTabs from './components/WorkspaceTabs';
+import { useWorkspace } from './store/useWorkspace';
 import ConversionPanel from './components/ConversionPanel';
 import CompressionPanel from './components/CompressionPanel';
 import TextExtractionPanel from './components/TextExtractionPanel';
@@ -23,6 +25,7 @@ export const useDarkMode = () => {
 function App() {
   const [activePanel, setActivePanel] = useState('conversion');
   const [files, setFiles] = useState([]);
+  const { tabs, activeTabId, setTabPanel, setTabFiles } = useWorkspace();
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [logs, setLogs] = useState([]);
@@ -54,7 +57,9 @@ function App() {
   };
 
   const handleProcess = async (operationType, options = {}) => {
-    if (files.length === 0) {
+    const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
+    const tabFiles = activeTab?.files || [];
+    if (tabFiles.length === 0) {
       setLogs(prev => [...prev, '❌ No files selected for processing']);
       return;
     }
@@ -66,10 +71,10 @@ function App() {
     try {
       setLogs(prev => [...prev, '🚀 Starting file processing...']);
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < tabFiles.length; i++) {
+        const file = tabFiles[i];
         setLogs(prev => [...prev, `📁 Processing: ${file.name}`]);
-        setProgressPercent((i / files.length) * 50);
+        setProgressPercent((i / tabFiles.length) * 50);
 
         let result;
         switch (operationType) {
@@ -82,11 +87,17 @@ function App() {
           case 'extraction':
             result = await api.extractText(file, options.mode, options.includeMetadata, options.language);
             break;
+          case 'archive-extraction':
+            // archive extraction works on the whole selection at once
+            if (i === 0) {
+              result = await api.extractArchive(tabFiles, { extractPath: options.extractPath, overwriteExisting: options.overwriteExisting, password: options.password });
+            }
+            break;
           default:
             throw new Error(`Unknown operation type: ${operationType}`);
         }
 
-        setProgressPercent(((i + 1) / files.length) * 100);
+        setProgressPercent(((i + 1) / tabFiles.length) * 100);
         setLogs(prev => [...prev, `✅ Successfully processed: ${file.name}`]);
         
         if (result) {
@@ -160,7 +171,8 @@ function App() {
   };
 
   const handleReset = () => {
-    setFiles([]);
+    const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
+    setTabFiles(activeTab.id, []);
     setProgressPercent(0);
     setLogs([]);
   };
@@ -192,12 +204,14 @@ function App() {
   }, []);
 
   const renderActivePanel = () => {
+    const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
+    const panel = activeTab?.panel || activePanel;
     switch (activePanel) {
       case 'conversion':
         return (
           <ConversionPanel
-            files={files}
-            setFiles={setFiles}
+            files={activeTab?.files || []}
+            setFiles={(f) => setTabFiles(activeTab.id, typeof f === 'function' ? f(activeTab.files) : f)}
             isProcessing={isProcessing}
             progressPercent={progressPercent}
             logs={logs}
@@ -208,8 +222,8 @@ function App() {
       case 'compression':
         return (
           <CompressionPanel
-            files={files}
-            setFiles={setFiles}
+            files={activeTab?.files || []}
+            setFiles={(f) => setTabFiles(activeTab.id, typeof f === 'function' ? f(activeTab.files) : f)}
             isProcessing={isProcessing}
             progressPercent={progressPercent}
             logs={logs}
@@ -220,8 +234,8 @@ function App() {
       case 'text-extraction':
         return (
           <TextExtractionPanel
-            files={files}
-            setFiles={setFiles}
+            files={activeTab?.files || []}
+            setFiles={(f) => setTabFiles(activeTab.id, typeof f === 'function' ? f(activeTab.files) : f)}
             isProcessing={isProcessing}
             progressPercent={progressPercent}
             logs={logs}
@@ -232,8 +246,8 @@ function App() {
       case 'archive-extraction':
         return (
           <ArchiveExtractionPanel
-            files={files}
-            setFiles={setFiles}
+            files={activeTab?.files || []}
+            setFiles={(f) => setTabFiles(activeTab.id, typeof f === 'function' ? f(activeTab.files) : f)}
             isProcessing={isProcessing}
             progressPercent={progressPercent}
             logs={logs}
@@ -337,9 +351,10 @@ function App() {
         </div>
         
         <div className="flex h-screen">
-          <Sidebar activePanel={activePanel} setActivePanel={setActivePanel} />
+          <Sidebar activePanel={activePanel} setActivePanel={(p) => { setActivePanel(p); const t = tabs.find(t => t.id === activeTabId); if (t) setTabPanel(t.id, p); }} />
           
           <main className="flex-1 overflow-auto">
+            <WorkspaceTabs />
             <div className="p-6">
               {renderActivePanel()}
             </div>

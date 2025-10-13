@@ -1,11 +1,24 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDarkMode } from '../App';
 import FileUpload from './FileUpload';
 import ProgressStatus from './ProgressStatus';
+import * as api from '../services/api';
 
 function TextExtractionPanel({ files, setFiles, isProcessing, progressPercent, logs, onProcess, onReset }) {
 	const { darkMode } = useDarkMode();
 	const canProcess = files.length > 0;
+	const [languages, setLanguages] = useState([]);
+	const [ocrLang, setOcrLang] = useState('auto');
+	const [includeMetadata, setIncludeMetadata] = useState(false);
+
+	useEffect(() => {
+		(async () => {
+			try {
+				const resp = await api.getExtractionLanguages();
+				if (resp.success) setLanguages(resp.data);
+			} catch (_) {}
+		})();
+	}, []);
 
 	return (
 		<div className="space-y-6">
@@ -25,17 +38,32 @@ function TextExtractionPanel({ files, setFiles, isProcessing, progressPercent, l
 				<div className="space-y-6">
 					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Upload Files</h2>
-						<FileUpload files={files} setFiles={setFiles} />
+					<FileUpload files={files} setFiles={setFiles} />
 					</div>
 				</div>
 
 				<div className="space-y-6">
 					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Process Controls</h2>
+					<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Process Controls</h2>
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+						<div>
+							<label className={`${darkMode ? 'text-gray-200' : 'text-gray-700'} block text-sm font-medium mb-2`}>OCR Language</label>
+							<select value={ocrLang} onChange={(e) => setOcrLang(e.target.value)} className={`w-full p-3 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-white border-gray-300 text-gray-800'}`}>
+								<option value="auto">Auto Detect</option>
+								{languages.map(l => (
+									<option key={l.value} value={l.value}>{l.label}</option>
+								))}
+							</select>
+						</div>
+						<label className="flex items-center space-x-2 mt-1">
+							<input type="checkbox" checked={includeMetadata} onChange={(e) => setIncludeMetadata(e.target.checked)} />
+							<span className={`${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Include metadata</span>
+						</label>
+					</div>
 						
 						<div className="space-y-4">
-							<button
-								onClick={() => onProcess('extraction', {})}
+					<button
+						onClick={() => onProcess('extraction', { mode: 'auto', includeMetadata, language: ocrLang })}
 								disabled={!canProcess || isProcessing}
 								className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all duration-200 ${
 									canProcess && !isProcessing

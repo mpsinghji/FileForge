@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import * as api from '../services/api';
 
 function SettingsPanel() {
 	const [settings, setSettings] = useState({
@@ -18,6 +19,15 @@ function SettingsPanel() {
 		requirePassword: false,
 		sessionTimeout: 30,
 	});
+
+	useEffect(() => {
+		const saved = api.loadSettings();
+		if (saved) setSettings((prev) => ({ ...prev, ...saved }));
+	}, []);
+
+	useEffect(() => {
+		api.saveSettings(settings);
+	}, [settings]);
 
 	const handleSettingChange = (key, value) => {
 		setSettings(prev => ({ ...prev, [key]: value }));
@@ -213,9 +223,25 @@ function SettingsPanel() {
 			<div className="bg-white rounded-2xl shadow-lg p-6">
 				<h2 className="text-xl font-semibold text-gray-800 mb-4">Actions</h2>
 				<div className="space-y-3">
-					<button className="w-full py-3 px-6 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors">Save Settings</button>
-					<button className="w-full py-3 px-6 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors">Reset to Defaults</button>
-					<button className="w-full py-3 px-6 bg-red-100 text-red-700 rounded-xl font-medium hover:bg-red-200 transition-colors">Clear All Data</button>
+					<button className="w-full py-3 px-6 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors" onClick={() => api.saveSettings(settings)}>Save Settings</button>
+					<button className="w-full py-3 px-6 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors" onClick={() => setSettings({
+						autoSave: true,
+						notifications: true,
+						darkMode: false,
+						language: 'en',
+						maxFileSize: 100,
+						concurrentProcessing: 3,
+						tempFileRetention: 24,
+						outputQuality: 'high',
+						storageLocation: 'local',
+						cloudSync: false,
+						autoCleanup: true,
+						retentionDays: 30,
+						encryptFiles: false,
+						requirePassword: false,
+						sessionTimeout: 30,
+					})}>Reset to Defaults</button>
+					<button className="w-full py-3 px-6 bg-red-100 text-red-700 rounded-xl font-medium hover:bg-red-200 transition-colors" onClick={() => { localStorage.clear(); window.location.reload(); }}>Clear All Data</button>
 				</div>
 			</div>
 		</div>

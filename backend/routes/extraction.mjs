@@ -338,7 +338,7 @@ router.post('/archive', authenticateToken, uploadMultiple, handleUploadError, as
     return res.status(400).json({ success: false, error: 'No archives uploaded' });
   }
 
-  const { extractPath = 'extracted', overwriteExisting = false } = req.body;
+  const { extractPath = 'extracted', overwriteExisting = false, password = '' } = req.body;
 
   const results = [];
   for (const file of req.files) {
@@ -347,6 +347,7 @@ router.post('/archive', authenticateToken, uploadMultiple, handleUploadError, as
       {
         extractPath,
         overwriteExisting: String(overwriteExisting) === 'true' || overwriteExisting === true,
+        password: password || undefined,
       },
       (progress, message) => {
         // no-op for now, could stream logs later

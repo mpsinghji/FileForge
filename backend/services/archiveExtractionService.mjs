@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import unzipper from 'unzipper';
+import { execa } from 'execa';
+import sevenBin from '7zip-bin';
 
 export async function extractArchive(inputPath, options = {}, progressCallback) {
   const startTime = Date.now();
@@ -18,12 +20,26 @@ export async function extractArchive(inputPath, options = {}, progressCallback) 
   try {
     if (progressCallback) progressCallback(10, 'Preparing archive extraction...');
 
+    const password = typeof options.password === 'string' && options.password.length > 0 ? options.password : null;
+
     switch (inputExt) {
       case '.zip':
-        await extractZip(inputPath, outputDir, { overwriteExisting }, progressCallback);
+        await extractZip(inputPath, outputDir, { overwriteExisting, password }, progressCallback);
+        break;
+      case '.rar':
+      case '.7z':
+      case '.tar':
+      case '.gz':
+      case '.bz2':
+      case '.xz':
+      case '.tar.gz':
+      case '.tgz':
+      case '.tar.bz2':
+      case '.tbz2':
+        await extractWith7z(inputPath, outputDir, { overwriteExisting, password }, progressCallback);
         break;
       default:
-        throw new Error(`Unsupported archive type: ${inputExt}. Currently only .zip is supported.`);
+        await extractWith7z(inputPath, outputDir, { overwriteExisting, password }, progressCallback);
     }
 
     const processingTime = (Date.now() - startTime) / 1000;
@@ -45,7 +61,7 @@ export async function extractArchive(inputPath, options = {}, progressCallback) 
   }
 }
 
-async function extractZip(zipPath, outDir, { overwriteExisting }, progressCallback) {
+async function extractZip(zipPath, outDir, { overwriteExisting, password }, progressCallback) {
   const directory = await unzipper.Open.file(zipPath);
   const total = directory.files.length || 1;
   let processed = 0;
@@ -62,12 +78,18 @@ async function extractZip(zipPath, outDir, { overwriteExisting }, progressCallba
       if (!overwriteExisting && fs.existsSync(destPath)) {
         // Skip existing file if not overwriting
       } else {
-        await new Promise((resolve, reject) => {
-          entry.stream()
-            .pipe(fs.createWriteStream(destPath))
-            .on('finish', resolve)
-            .on('error', reject);
-        });
+        if (password) {
+          // Fallback to 7z for password-protected zip
+          await extractWith7z(zipPath, outDir, { overwriteExisting, password }, progressCallback);
+          break;
+        } else {
+          await new Promise((resolve, reject) => {
+            entry.stream()
+              .pipe(fs.createWriteStream(destPath))
+              .on('finish', resolve)
+              .on('error', reject);
+          });
+        }
       }
     }
 
@@ -76,6 +98,20 @@ async function extractZip(zipPath, outDir, { overwriteExisting }, progressCallba
       const pct = 10 + Math.floor((processed / total) * 80);
       progressCallback(pct, `Extracting ${entry.path}`);
     }
+  }
+}
+
+async function extractWith7z(archivePath, outDir, { overwriteExisting, password }, progressCallback) {
+  const sevenPath = sevenBin.path7za; // cross-platform 7z binary
+  const args = ['x', archivePath, `-o${outDir}`, overwriteExisting ? '-y' : '-aos'];
+  if (password) {
+    args.push(`-p${password}`);
+  }
+  if (progressCallback) progressCallback(20, 'Extracting with 7-Zip...');
+  try {
+    await execa(sevenPath, args);
+  } catch (err) {
+    throw new Error(`7-Zip extraction failed: ${err.shortMessage || err.message}`);
   }
 }
 

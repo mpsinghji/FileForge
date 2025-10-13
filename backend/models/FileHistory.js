@@ -56,6 +56,10 @@ const fileHistorySchema = new mongoose.Schema({
   timestamps: true
 });
 
+fileHistorySchema.index({ user_id: 1, createdAt: -1 });
+fileHistorySchema.index({ operation_type: 1, status: 1, createdAt: -1 });
+fileHistorySchema.index({ original_filename: 'text' });
+
 const FileHistory = mongoose.model('FileHistory', fileHistorySchema);
 
 export default FileHistory;

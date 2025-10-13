@@ -88,6 +88,17 @@ router.post('/compress', authenticateToken, uploadMultiple, handleUploadError, a
   });
 }));
 
+// Multi-file archive creation (ZIP/7z)
+router.post('/archive', authenticateToken, asyncHandler(async (req, res) => {
+  const { files = [], outputFormat = 'zip', compressionLevel = 'medium', archiveName = null, password = null } = req.body;
+  if (!Array.isArray(files) || files.length === 0) {
+    return res.status(400).json({ success: false, error: 'files must be a non-empty array of paths' });
+  }
+  const { createArchiveFromFiles } = await import('../services/compressionService.mjs');
+  const result = await createArchiveFromFiles(files, outputFormat, compressionLevel, archiveName, password, null);
+  res.status(200).json({ success: true, data: result });
+}));
+
 // Get compression status
 router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) => {
   const { jobId } = req.params;

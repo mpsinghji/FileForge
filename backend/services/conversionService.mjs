@@ -4,6 +4,8 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { fileTypeFromFile } from 'file-type';
+import mammoth from 'mammoth';
+import { marked } from 'marked';
 
 // Configure ffmpeg path
 import ffmpegStatic from 'ffmpeg-static';
@@ -14,7 +16,7 @@ export async function convertFile(inputPath, targetFormat, progressCallback) {
   const inputExt = path.extname(inputPath).toLowerCase();
   
   const outputFilename = `${uuidv4()}-${Date.now()}.${targetFormat.toLowerCase()}`;
-  const outputPath = path.join('processed', outputFilename);
+  let outputPath = path.join('processed', outputFilename);
 
   try {
     // Determine file type and conversion method
@@ -224,6 +226,10 @@ async function convertDocument(inputPath, outputPath, targetFormat, progressCall
     await convertTextToPdf(inputPath, outputPath, progressCallback);
   } else if (inputExt === '.pdf' && targetFormat === 'txt') {
     await convertPdfToText(inputPath, outputPath, progressCallback);
+  } else if (inputExt === '.docx' && targetFormat === 'txt') {
+    await convertDocxToText(inputPath, outputPath, progressCallback);
+  } else if (inputExt === '.md' && targetFormat === 'txt') {
+    await convertMarkdownToText(inputPath, outputPath, progressCallback);
   } else {
     await createPlaceholderDocument(inputPath, outputPath, targetFormat, progressCallback);
   }
@@ -235,6 +241,20 @@ async function convertDocument(inputPath, outputPath, targetFormat, progressCall
     outputPath: outputPath,
     outputSize: fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0
   };
+}
+
+async function convertDocxToText(inputPath, outputPath, progressCallback) {
+  if (progressCallback) progressCallback(40, 'Extracting DOCX text...');
+  const res = await mammoth.extractRawText({ path: inputPath });
+  fs.writeFileSync(outputPath, res.value || '');
+}
+
+async function convertMarkdownToText(inputPath, outputPath, progressCallback) {
+  if (progressCallback) progressCallback(40, 'Converting Markdown to text...');
+  const raw = fs.readFileSync(inputPath, 'utf-8');
+  const html = marked.parse(raw);
+  const text = html.replace(/<[^>]*>/g, ' ');
+  fs.writeFileSync(outputPath, text);
 }
 
 async function getMimeType(filePath) {

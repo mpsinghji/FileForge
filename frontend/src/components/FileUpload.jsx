@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { useDarkMode } from '../App';
 
-function FileUpload({ files = [], setFiles }) {
+function FileUpload({ files = [], setFiles, onFilesAdded }) {
   const { darkMode } = useDarkMode();
   
   const handleFileSelect = (e) => {
@@ -13,6 +13,7 @@ function FileUpload({ files = [], setFiles }) {
           index === self.findIndex((f) => f.name === file.name && f.size === file.size)
       );
     });
+    if (onFilesAdded) onFilesAdded(selected);
   };
 
   const handleDrop = (e) => {
@@ -25,6 +26,7 @@ function FileUpload({ files = [], setFiles }) {
           index === self.findIndex((f) => f.name === file.name && f.size === file.size)
       );
     });
+    if (onFilesAdded) onFilesAdded(dropped);
   };
 
   const removeFile = (index) => {

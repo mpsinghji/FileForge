@@ -1,4 +1,4 @@
-import Tesseract from 'tesseract.js';
+import Tesseract, { createWorker } from 'tesseract.js';
 import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
@@ -95,33 +95,22 @@ async function performOCR(inputPath, language, progressCallback) {
       ocrLanguage = language;
     }
 
-    // Configure OCR options for better accuracy
-    const ocrOptions = {
-      lang: ocrLanguage,
-      logger: m => {
-        if (progressCallback) {
-          if (m.status === 'recognizing text') {
-            const progress = 30 + (m.progress * 0.6); // 30% to 90%
-            progressCallback(progress, `OCR Progress: ${Math.round(m.progress * 100)}%`);
-          } else if (m.status === 'loading tesseract core') {
-            progressCallback(35, 'Loading Tesseract core...');
-          } else if (m.status === 'loading language traineddata') {
-            progressCallback(40, 'Loading language data...');
-          } else if (m.status === 'initializing tesseract') {
-            progressCallback(45, 'Initializing Tesseract...');
-          }
-        }
-      },
-      // OCR configuration for better text recognition
-      oem: 3, // Use LSTM OCR Engine
-      psm: 6, // Assume uniform block of text
-      dpi: 300, // Assume 300 DPI for better accuracy
-      // Additional parameters for better text quality
-      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:()[]{}\'"`~@#$%^&*+=|\\/<>-_', // Allow common characters
-      preserve_interword_spaces: '1' // Preserve spaces between words
-    };
-
-    const result = await Tesseract.recognize(processedImagePath, ocrOptions);
+    // Use dedicated worker to avoid DataCloneError and improve stability on Node
+    const worker = await createWorker({
+      cacheMethod: 'none'
+    });
+    await worker.load();
+    await worker.loadLanguage(ocrLanguage);
+    await worker.initialize(ocrLanguage);
+    await worker.setParameters({
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:()[]{}\'"`~@#$%^&*+=|\\/<>-_',
+      preserve_interword_spaces: '1',
+      user_defined_dpi: '300',
+      tessedit_ocr_engine_mode: '3',
+      tessedit_pageseg_mode: '6'
+    });
+    const result = await worker.recognize(processedImagePath);
+    await worker.terminate();
 
     // Clean up processed image
     if (fs.existsSync(processedImagePath)) {
@@ -250,41 +239,17 @@ async function preprocessImageForOCR(inputPath) {
   const processedPath = path.join('temp', `${uuidv4()}-processed.png`);
 
   try {
-    // Get image info first
-    const imageInfo = await sharp(inputPath).metadata();
-    
-    // Apply preprocessing based on image characteristics
-    let processedImage = sharp(inputPath);
-    
-    // Convert to grayscale for better OCR
-    processedImage = processedImage.grayscale();
-    
-    // Apply contrast enhancement
-    processedImage = processedImage.linear(1.2, -0.1); // Increase contrast
-    
-    // Normalize brightness
-    processedImage = processedImage.normalize();
-    
-    // Apply sharpening for better text clarity
-    processedImage = processedImage.sharpen({
-      sigma: 1,
-      flat: 1,
-      jagged: 2
-    });
-    
-    // Resize if image is too large (OCR works better with reasonable sizes)
-    if (imageInfo.width > 3000 || imageInfo.height > 3000) {
-      processedImage = processedImage.resize(3000, 3000, {
-        fit: 'inside',
-        withoutEnlargement: true
+    const { Worker } = await import('worker_threads');
+    await new Promise((resolve, reject) => {
+      const worker = new Worker(new URL('./worker/imagePreprocessor.mjs', import.meta.url), {
+        workerData: { inputPath, outputPath: processedPath }
       });
-    }
-    
-    // Apply noise reduction
-    processedImage = processedImage.median(1);
-    
-    // Save as PNG for best quality
-    await processedImage.png().toFile(processedPath);
+      worker.on('message', (msg) => {
+        if (msg.ok) resolve(); else reject(new Error(msg.error));
+      });
+      worker.on('error', reject);
+      worker.on('exit', (code) => { if (code !== 0) reject(new Error(`Worker exited with code ${code}`)); });
+    });
 
     return processedPath;
   } catch (error) {

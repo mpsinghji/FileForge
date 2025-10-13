@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import logger from './services/logger.js';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -17,6 +18,8 @@ import authRoutes from './routes/auth.mjs';
 
 import { errorHandler } from './middleware/errorHandler.mjs';
 import connectdb from './utils/db.js';
+import cron from 'node-cron';
+import { cleanupOldFiles } from './services/databaseService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,6 +28,7 @@ dotenv.config({ path: path.join(__dirname, 'config/config.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const USE_HTTPS = String(process.env.HTTPS || 'false') === 'true';
 
 app.use(helmet({
   crossOriginEmbedderPolicy: false,
@@ -42,9 +46,16 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Basic rate limiting
+const limiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000'),
+  max: parseInt(process.env.RATE_LIMIT_MAX || '120')
+});
+app.use('/api/', limiter);
+
 app.use(compression());
 
-app.use(morgan('combined'));
+app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } }));
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/processed', express.static(path.join(__dirname, 'processed')));
@@ -109,12 +120,29 @@ async function startServer() {
     }
     console.log('✅ Directories created');
     
-    console.log('🔄 Starting HTTP server...');
-    const server = app.listen(PORT, () => {
-      console.log(`🚀 FileForge Backend Server running on port ${PORT}`);
-      console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-    });
+    console.log('🔄 Starting server...');
+    let server;
+    if (USE_HTTPS) {
+      const fs = await import('fs');
+      const https = await import('https');
+      const keyPath = process.env.SSL_KEY_PATH;
+      const certPath = process.env.SSL_CERT_PATH;
+      if (!keyPath || !certPath) {
+        console.warn('⚠️ HTTPS enabled but SSL paths missing; falling back to HTTP');
+        server = app.listen(PORT, () => {
+          console.log(`🚀 HTTP server on :${PORT}`);
+        });
+      } else {
+        const options = { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) };
+        server = https.createServer(options, app).listen(PORT, () => {
+          console.log(`🔐 HTTPS server on :${PORT}`);
+        });
+      }
+    } else {
+      server = app.listen(PORT, () => {
+        console.log(`🚀 HTTP server on :${PORT}`);
+      });
+    }
     
     server.on('error', (error) => {
       console.error('❌ Server error:', error);
@@ -122,6 +150,17 @@ async function startServer() {
     });
     
     console.log('✅ HTTP server started');
+
+    // Schedule auto-clean daily at 3 AM
+    cron.schedule('0 3 * * *', async () => {
+      try {
+        const days = parseInt(process.env.CLEANUP_DAYS || '7');
+        const deleted = await cleanupOldFiles(days);
+        console.log(`🧹 Auto-clean: removed ${deleted} old records/files (> ${days} days)`);
+      } catch (err) {
+        console.error('Auto-clean failed:', err);
+      }
+    });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
@@ -141,3 +180,10 @@ process.on('SIGINT', () => {
 
 // Start the server
 startServer();
+
+// Prevent crashes on unhandled rejections
+process.on('unhandledRejection', (reason) => {
+  try {
+    console.error('Unhandled promise rejection:', reason);
+  } catch {}
+});

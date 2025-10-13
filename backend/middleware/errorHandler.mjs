@@ -1,5 +1,7 @@
+import logger from '../services/logger.js';
+
 export const errorHandler = (err, req, res, next) => {
-  console.error('Error:', err);
+  logger.error('Error handler', { message: err.message, stack: err.stack, path: req.originalUrl, method: req.method });
 
   // Default error
   let error = {
