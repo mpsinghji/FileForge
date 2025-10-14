@@ -89,7 +89,7 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 				</div>
 			</div>
 
-			<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+			<div className="grid grid-cols-2 lg:grid-cols-2 gap-6">
 				<div className="space-y-6">
 					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Upload Files</h2>
@@ -126,8 +126,8 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
           </div>
 
           {(suggestions.length > 0 || estimate) && (
-            <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-              <h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Suggestions</h2>
+            <div className={`rounded-2xl shadow-lg p-4 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+              <h2 className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Suggestions</h2>
               {suggestions.length > 0 && (
                 <ul className={`mb-3 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                   {suggestions.map((s, i) => (
@@ -137,7 +137,7 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
               )}
               {estimate && (
                 <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Estimated MP4 size: {estimate.mp4 ? (estimate.mp4/1024/1024).toFixed(2) : '-'} MB
+                  Estimated size: {estimate.mp4 ? (estimate.mp4/1024/1024).toFixed(2) : '-'} MB
                 </div>
               )}
             </div>

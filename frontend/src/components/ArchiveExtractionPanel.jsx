@@ -23,6 +23,25 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 
 	return (
 		<div className="space-y-6">
+			{/* 7-Zip Notice */}
+			<div className={`rounded-lg p-4 ${darkMode ? 'bg-yellow-900 border-yellow-700' : 'bg-yellow-50 border-yellow-200'} border`}>
+				<div className="flex items-start space-x-3">
+					<span className="text-yellow-600 text-xl">⚠️</span>
+					<div>
+						<h4 className={`font-medium ${darkMode ? 'text-yellow-200' : 'text-yellow-800'}`}>
+							Archive Format Support
+						</h4>
+						<p className={`text-sm mt-1 ${darkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
+							ZIP files work out of the box. For RAR, 7z, TAR, and other formats, please install{' '}
+							<a href="https://www.7-zip.org/" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
+								7-Zip
+							</a>{' '}
+							on your system.
+						</p>
+					</div>
+				</div>
+			</div>
+
 			<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 				<div className="flex items-center space-x-3 mb-4">
 					<div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-xl flex items-center justify-center">

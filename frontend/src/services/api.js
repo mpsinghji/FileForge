@@ -254,6 +254,13 @@ export const getExtractionLanguages = async () => {
   return handleResponse(response);
 };
 
+export const testArchiveService = async () => {
+  const response = await fetch(`${API_BASE_URL}/extraction/test-archive`, {
+    headers: { ...getAuthHeaders() },
+  });
+  return handleResponse(response);
+};
+
 export const extractArchive = async (files, { extractPath = 'extracted', overwriteExisting = false, password = '' } = {}) => {
   const formData = new FormData();
   for (const f of files) formData.append('files', f);

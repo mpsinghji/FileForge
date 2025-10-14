@@ -330,11 +330,37 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
   }
 }
 
-export default router;
+// Test archive extraction endpoint
+router.get('/test-archive', authenticateToken, asyncHandler(async (req, res) => {
+  console.log('[ARCHIVE TEST] Testing archive extraction service');
+  
+  try {
+    // Test if the service can be imported
+    const { extractArchive } = await import('../services/archiveExtractionService.mjs');
+    console.log('[ARCHIVE TEST] Service imported successfully');
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Archive extraction service is available',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[ARCHIVE TEST] Service test failed:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+}));
 
 // Archive extraction endpoint
 router.post('/archive', authenticateToken, uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
+  console.log('[ARCHIVE ROUTE DEBUG] Archive extraction request received');
+  console.log('[ARCHIVE ROUTE DEBUG] Files:', req.files ? req.files.map(f => ({ name: f.originalname, path: f.path, size: f.size })) : 'No files');
+  console.log('[ARCHIVE ROUTE DEBUG] Body:', req.body);
+  
   if (!req.files || req.files.length === 0) {
+    console.log('[ARCHIVE ROUTE DEBUG] No files uploaded');
     return res.status(400).json({ success: false, error: 'No archives uploaded' });
   }
 
@@ -342,19 +368,33 @@ router.post('/archive', authenticateToken, uploadMultiple, handleUploadError, as
 
   const results = [];
   for (const file of req.files) {
-    const r = await extractArchive(
-      file.path,
-      {
-        extractPath,
-        overwriteExisting: String(overwriteExisting) === 'true' || overwriteExisting === true,
-        password: password || undefined,
-      },
-      (progress, message) => {
-        // no-op for now, could stream logs later
-      }
-    );
-    results.push({ original: file.originalname, ...r });
+    try {
+      console.log('[ARCHIVE ROUTE DEBUG] Processing file:', file.originalname);
+      const r = await extractArchive(
+        file.path,
+        {
+          extractPath,
+          overwriteExisting: String(overwriteExisting) === 'true' || overwriteExisting === true,
+          password: password || undefined,
+        },
+        (progress, message) => {
+          console.log(`[ARCHIVE ROUTE DEBUG] Progress: ${progress}% - ${message}`);
+        }
+      );
+      console.log('[ARCHIVE ROUTE DEBUG] Extraction successful for:', file.originalname);
+      results.push({ original: file.originalname, ...r });
+    } catch (error) {
+      console.error('[ARCHIVE ROUTE DEBUG] Archive extraction error for', file.originalname, ':', error);
+      results.push({ 
+        original: file.originalname, 
+        error: error.message,
+        success: false 
+      });
+    }
   }
 
+  console.log('[ARCHIVE ROUTE DEBUG] Sending response with results:', results);
   res.status(200).json({ success: true, data: { results } });
 }));
+
+export default router;
