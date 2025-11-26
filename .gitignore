@@ -1,0 +1,8 @@
+node_modules/
+backend/logs/
+*.log
+.env
+dist/
+backend/reset_user.mjs
+backend/test_7z.mjs
+backend/test_extraction_endpoint.mjs

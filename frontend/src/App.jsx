@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import Sidebar from './components/Sidebar';
 import WorkspaceTabs from './components/WorkspaceTabs';
@@ -30,12 +31,12 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [logs, setLogs] = useState([]);
-  
+
   // Authentication state from persistent store
   const { isAuthenticated, user, logout: logoutStore, checkAuth } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Global Dark Mode State
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
@@ -85,6 +86,7 @@ function App() {
             result = await api.compressFile(file, options.compressionLevel, options.quality, options.removeMetadata);
             break;
           case 'extraction':
+          case 'text-extraction':
             result = await api.extractText(file, options.mode, options.includeMetadata, options.language);
             break;
           case 'archive-extraction':
@@ -99,14 +101,14 @@ function App() {
 
         setProgressPercent(((i + 1) / tabFiles.length) * 100);
         setLogs(prev => [...prev, `✅ Successfully processed: ${file.name}`]);
-        
+
         if (result) {
           setLogs(prev => [...prev, `📁 Converted file: ${result.filename || result.outputPath || 'Unknown'}`]);
           setLogs(prev => [...prev, `📊 File size: ${result.size || result.outputSize ? ((result.size || result.outputSize) / 1024).toFixed(1) : 'Unknown'} KB`]);
         } else {
           setLogs(prev => [...prev, `❌ No conversion result received`]);
         }
-        
+
         setLogs(prev => [...prev, `🔗 Download available in History tab`]);
       }
 
@@ -241,8 +243,8 @@ function App() {
             onReset={handleReset}
           />
         );
-             case 'history':
-         return <HistoryPanel />;
+      case 'history':
+        return <HistoryPanel />;
       case 'settings':
         return <SettingsPanel />;
       default:
@@ -289,7 +291,7 @@ function App() {
               Get Started
             </button>
           </div>
-          
+
           <AuthModal
             isOpen={showAuthModal}
             onClose={() => setShowAuthModal(false)}
@@ -316,11 +318,10 @@ function App() {
                 </span>
                 <button
                   onClick={toggleDarkMode}
-                  className={`p-2 rounded-full transition-colors ${
-                    darkMode 
-                      ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600' 
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  className={`p-2 rounded-full transition-colors ${darkMode
+                    ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
                   title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
                 >
                   {darkMode ? '☀️' : '🌙'}
@@ -335,10 +336,10 @@ function App() {
             </div>
           </div>
         </div>
-        
+
         <div className="flex h-screen">
           <Sidebar activePanel={activePanel} setActivePanel={(p) => { setActivePanel(p); const t = tabs.find(t => t.id === activeTabId); if (t) setTabPanel(t.id, p); }} />
-          
+
           <main className="flex-1 overflow-auto">
             <WorkspaceTabs />
             <div className="p-6">

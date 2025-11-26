@@ -3,11 +3,11 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import unzipper from 'unzipper';
 import { execa } from 'execa';
-import { spawn } from 'child_process';
+import sevenBin from '7zip-bin';
 
 export async function extractArchive(inputPath, options = {}, progressCallback) {
   console.log('[ARCHIVE DEBUG] Starting archive extraction:', { inputPath, options });
-  
+
   const startTime = Date.now();
   const inputExt = path.extname(inputPath).toLowerCase();
   const baseOutDir = options.extractPath && typeof options.extractPath === 'string' ? options.extractPath : 'extracted';
@@ -25,7 +25,7 @@ export async function extractArchive(inputPath, options = {}, progressCallback) 
     if (progressCallback) progressCallback(10, 'Preparing archive extraction...');
 
     const password = typeof options.password === 'string' && options.password.length > 0 ? options.password : null;
-    
+
     console.log('[ARCHIVE DEBUG] Processing file extension:', inputExt);
 
     switch (inputExt) {
@@ -48,7 +48,7 @@ export async function extractArchive(inputPath, options = {}, progressCallback) 
           await extractWith7z(inputPath, outputDir, { overwriteExisting, password }, progressCallback);
         } catch (error) {
           console.log('[ARCHIVE DEBUG] 7-Zip failed:', error.message);
-          throw new Error(`Archive format ${inputExt} requires 7-Zip. Please install 7-Zip from https://www.7-zip.org/ or try a ZIP file.`);
+          throw new Error(`Archive format ${inputExt} extraction failed: ${error.message}`);
         }
         break;
       default:
@@ -62,7 +62,7 @@ export async function extractArchive(inputPath, options = {}, progressCallback) 
             console.log('[ARCHIVE DEBUG] Trying ZIP extraction as fallback');
             await extractZip(inputPath, outputDir, { overwriteExisting, password }, progressCallback);
           } catch (zipError) {
-            throw new Error(`Archive format ${inputExt} is not supported. Please install 7-Zip from https://www.7-zip.org/ or try a ZIP file.`);
+            throw new Error(`Archive format ${inputExt} is not supported.`);
           }
         }
     }
@@ -70,12 +70,12 @@ export async function extractArchive(inputPath, options = {}, progressCallback) 
     const processingTime = (Date.now() - startTime) / 1000;
     const stats = dirSize(outputDir);
 
-    console.log('[ARCHIVE DEBUG] Extraction completed:', { 
-      outputDir, 
-      processingTime, 
+    console.log('[ARCHIVE DEBUG] Extraction completed:', {
+      outputDir,
+      processingTime,
       stats,
       filesExtracted: stats.files,
-      totalSize: stats.size 
+      totalSize: stats.size
     });
 
     if (progressCallback) progressCallback(100, 'Archive extraction completed');
@@ -89,14 +89,14 @@ export async function extractArchive(inputPath, options = {}, progressCallback) 
     };
   } catch (err) {
     // Cleanup on failure
-    try { if (fs.existsSync(outputDir)) fs.rmSync(outputDir, { recursive: true, force: true }); } catch {}
+    try { if (fs.existsSync(outputDir)) fs.rmSync(outputDir, { recursive: true, force: true }); } catch { }
     throw err;
   }
 }
 
 async function extractZip(zipPath, outDir, { overwriteExisting, password }, progressCallback) {
   console.log('[ARCHIVE DEBUG] Starting ZIP extraction');
-  
+
   try {
     const directory = await unzipper.Open.file(zipPath);
     const total = directory.files.length || 1;
@@ -145,7 +145,7 @@ async function extractZip(zipPath, outDir, { overwriteExisting, password }, prog
         progressCallback(pct, `Extracting ${entry.path}`);
       }
     }
-    
+
     console.log('[ARCHIVE DEBUG] ZIP extraction completed successfully');
   } catch (error) {
     console.error('[ARCHIVE DEBUG] ZIP extraction failed:', error);
@@ -155,41 +155,21 @@ async function extractZip(zipPath, outDir, { overwriteExisting, password }, prog
 
 async function extractWith7z(archivePath, outDir, { overwriteExisting, password }, progressCallback) {
   console.log('[ARCHIVE DEBUG] Using 7-Zip for extraction');
-  
-  // Try to find 7z executable
-  const possiblePaths = [
-    '7z', // System PATH
-    '7za', // System PATH
-    'C:\\Program Files\\7-Zip\\7z.exe', // Windows default
-    'C:\\Program Files (x86)\\7-Zip\\7z.exe', // Windows 32-bit
-    '/usr/bin/7z', // Linux
-    '/usr/local/bin/7z', // macOS
-    '/opt/homebrew/bin/7z' // macOS Apple Silicon
-  ];
-  
-  let sevenPath = null;
-  for (const path of possiblePaths) {
-    try {
-      await execa(path, ['--help'], { timeout: 5000 });
-      sevenPath = path;
-      break;
-    } catch (e) {
-      // Continue to next path
-    }
+
+  const sevenPath = sevenBin.path7za;
+  console.log('[ARCHIVE DEBUG] 7-Zip binary path:', sevenPath);
+
+  if (!fs.existsSync(sevenPath)) {
+    throw new Error('7-Zip binary not found at expected path: ' + sevenPath);
   }
-  
-  if (!sevenPath) {
-    console.log('[ARCHIVE DEBUG] 7-Zip not found, will use ZIP-only extraction');
-    throw new Error('7-Zip executable not found. Only ZIP files are supported without 7-Zip. Please install 7-Zip for RAR, 7z, and other formats.');
-  }
-  
+
   const args = ['x', archivePath, `-o${outDir}`, overwriteExisting ? '-y' : '-aos'];
   if (password) {
     args.push(`-p${password}`);
   }
-  
+
   console.log('[ARCHIVE DEBUG] 7-Zip command:', sevenPath, args);
-  
+
   if (progressCallback) progressCallback(20, 'Extracting with 7-Zip...');
   try {
     const result = await execa(sevenPath, args, { timeout: 300000 }); // 5 minute timeout
