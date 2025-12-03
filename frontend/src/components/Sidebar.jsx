@@ -1,44 +1,47 @@
 import React from 'react';
 import { useDarkMode } from '../App';
+import { useLanguage } from '../contexts/LanguageContext';
 
 function Sidebar({ activePanel, setActivePanel }) {
   const { darkMode } = useDarkMode();
+  const { t } = useLanguage();
+
   const menuItems = [
     {
       id: 'conversion',
-      label: 'File Conversion',
+      label: t('sidebar.conversion'),
       icon: '🔄',
-      description: 'Convert files between formats'
+      description: t('sidebar.conversion.desc')
     },
     {
       id: 'compression',
-      label: 'Compression',
+      label: t('sidebar.compression'),
       icon: '🗜️',
-      description: 'Compress files to reduce size'
+      description: t('sidebar.compression.desc')
     },
     {
       id: 'text-extraction',
-      label: 'Text Extraction',
+      label: t('sidebar.textExtraction'),
       icon: '📝',
-      description: 'Extract text from documents'
+      description: t('sidebar.textExtraction.desc')
     },
     {
       id: 'archive-extraction',
-      label: 'Archive Extraction',
+      label: t('sidebar.archiveExtraction'),
       icon: '📦',
-      description: 'Extract files from archives'
+      description: t('sidebar.archiveExtraction.desc')
     },
     {
       id: 'history',
-      label: 'History',
+      label: t('sidebar.history'),
       icon: '📋',
-      description: 'View processing history'
+      description: t('sidebar.history.desc')
     },
     {
       id: 'settings',
-      label: 'Settings',
+      label: t('sidebar.settings'),
       icon: '⚙️',
-      description: 'Configure application settings'
+      description: t('sidebar.settings.desc')
     }
   ];
 
@@ -50,8 +53,8 @@ function Sidebar({ activePanel, setActivePanel }) {
             <span className="text-white text-xl font-bold">F</span>
           </div>
           <div>
-            <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>FileForge</h2>
-            <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>File Processing Suite</p>
+            <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('app.name')}</h2>
+            <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{t('app.tagline')}</p>
           </div>
         </div>
       </div>
@@ -61,25 +64,22 @@ function Sidebar({ activePanel, setActivePanel }) {
           <button
             key={item.id}
             onClick={() => setActivePanel(item.id)}
-            className={`w-full p-4 rounded-xl text-left transition-all duration-200 group hover:shadow-md ${
-              activePanel === item.id
+            className={`w-full p-4 rounded-xl text-left transition-all duration-200 group hover:shadow-md ${activePanel === item.id
                 ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg'
-                : darkMode 
+                : darkMode
                   ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
                   : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
-            }`}
+              }`}
           >
             <div className="flex items-center space-x-3">
               <span className="text-2xl">{item.icon}</span>
               <div className="flex-1">
-                <h3 className={`font-semibold ${
-                  activePanel === item.id ? 'text-white' : darkMode ? 'text-gray-200' : 'text-gray-800'
-                }`}>
+                <h3 className={`font-semibold ${activePanel === item.id ? 'text-white' : darkMode ? 'text-gray-200' : 'text-gray-800'
+                  }`}>
                   {item.label}
                 </h3>
-                <p className={`text-sm ${
-                  activePanel === item.id ? 'text-blue-100' : darkMode ? 'text-gray-400' : 'text-gray-500'
-                }`}>
+                <p className={`text-sm ${activePanel === item.id ? 'text-blue-100' : darkMode ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
                   {item.description}
                 </p>
               </div>
@@ -92,14 +92,13 @@ function Sidebar({ activePanel, setActivePanel }) {
       </nav>
 
       <div className={`p-4 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className={`rounded-lg p-3 ${
-          darkMode 
-            ? 'bg-gradient-to-r from-indigo-900 to-blue-900' 
+        <div className={`rounded-lg p-3 ${darkMode
+            ? 'bg-gradient-to-r from-indigo-900 to-blue-900'
             : 'bg-gradient-to-r from-indigo-50 to-blue-50'
-        }`}>
+          }`}>
           <div className="flex items-center space-x-2">
           </div>
-          <p className={`text-xs mt-1 ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Ready to process files</p>
+          <p className={`text-xs mt-1 ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('sidebar.ready')}</p>
         </div>
       </div>
     </div>
@@ -107,4 +106,3 @@ function Sidebar({ activePanel, setActivePanel }) {
 }
 
 export default Sidebar;
-

@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import * as api from '../services/api';
 import { useDarkMode } from '../App';
+import { useLanguage } from '../contexts/LanguageContext';
 
 function SettingsPanel() {
     const { darkMode, toggleDarkMode } = useDarkMode();
+    const { language, setLanguage, t } = useLanguage();
     const [settings, setSettings] = useState({
         autoSave: true,
         notifications: true,
         darkMode: darkMode,
-        language: 'en',
+        language: language,
         maxFileSize: 100,
         concurrentProcessing: 3,
         tempFileRetention: 24,
@@ -27,9 +29,14 @@ function SettingsPanel() {
         setSettings(prev => ({ ...prev, darkMode }));
     }, [darkMode]);
 
+    // Sync local settings with global language when it changes externally
+    useEffect(() => {
+        setSettings(prev => ({ ...prev, language }));
+    }, [language]);
+
     useEffect(() => {
         const saved = api.loadSettings();
-        if (saved) setSettings((prev) => ({ ...prev, ...saved, darkMode }));
+        if (saved) setSettings((prev) => ({ ...prev, ...saved, darkMode, language }));
     }, []);
 
     useEffect(() => {
@@ -46,13 +53,16 @@ function SettingsPanel() {
         handleSettingChange('darkMode', isEnabled); // Update local setting
     };
 
+    const handleLanguageChange = (e) => {
+        const newLang = e.target.value;
+        setLanguage(newLang); // Update global language
+        handleSettingChange('language', newLang); // Update local setting
+    };
+
     const languages = [
         { value: 'en', label: 'English' },
         { value: 'es', label: 'Español' },
         { value: 'fr', label: 'Français' },
-        { value: 'de', label: 'Deutsch' },
-        { value: 'zh', label: '中文' },
-        { value: 'ja', label: '日本語' },
     ];
 
     const qualityOptions = [
@@ -75,42 +85,42 @@ function SettingsPanel() {
                         <span className="text-white text-2xl">⚙️</span>
                     </div>
                     <div>
-                        <h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Settings</h1>
-                        <p className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Configure your FileForge preferences</p>
+                        <h1 className={`text-3xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.title')}</h1>
+                        <p className={darkMode ? 'text-gray-300' : 'text-gray-600'}>{t('settings.subtitle')}</p>
                     </div>
                 </div>
             </div>
 
             <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>General Settings</h2>
+                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>{t('settings.general')}</h2>
                 <div className="space-y-4">
                     <label className="flex items-center justify-between cursor-pointer">
                         <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>Auto Save</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Automatically save processing results</div>
+                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.autoSave')}</div>
+                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.autoSave.desc')}</div>
                         </div>
                         <input type="checkbox" checked={settings.autoSave} onChange={(e) => handleSettingChange('autoSave', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
                     </label>
 
                     <label className="flex items-center justify-between cursor-pointer">
                         <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>Notifications</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Show notifications for completed tasks</div>
+                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.notifications')}</div>
+                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.notifications.desc')}</div>
                         </div>
                         <input type="checkbox" checked={settings.notifications} onChange={(e) => handleSettingChange('notifications', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
                     </label>
 
                     <label className="flex items-center justify-between cursor-pointer">
                         <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>Dark Mode</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Use dark theme interface</div>
+                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.darkMode')}</div>
+                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.darkMode.desc')}</div>
                         </div>
                         <input type="checkbox" checked={darkMode} onChange={handleDarkModeToggle} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
                     </label>
 
                     <div>
-                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>Language</label>
-                        <select value={settings.language} onChange={(e) => handleSettingChange('language', e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.language')}</label>
+                        <select value={language} onChange={handleLanguageChange} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                             {languages.map((lang) => (
                                 <option key={lang.value} value={lang.value}>{lang.label}</option>
                             ))}
@@ -120,10 +130,10 @@ function SettingsPanel() {
             </div>
 
             <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>Processing Settings</h2>
+                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>{t('settings.processing')}</h2>
                 <div className="space-y-4">
                     <div>
-                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>Maximum File Size (MB)</label>
+                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.maxFileSize')}</label>
                         <input type="range" min="10" max="500" value={settings.maxFileSize} onChange={(e) => handleSettingChange('maxFileSize', parseInt(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         <div className="flex justify-between text-sm text-gray-500 mt-1">
                             <span>10 MB</span>
@@ -133,7 +143,7 @@ function SettingsPanel() {
                     </div>
 
                     <div>
-                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>Concurrent Processing</label>
+                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.concurrentProcessing')}</label>
                         <input type="range" min="1" max="10" value={settings.concurrentProcessing} onChange={(e) => handleSettingChange('concurrentProcessing', parseInt(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         <div className="flex justify-between text-sm text-gray-500 mt-1">
                             <span>1 file</span>
@@ -143,7 +153,7 @@ function SettingsPanel() {
                     </div>
 
                     <div>
-                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>Output Quality</label>
+                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.outputQuality')}</label>
                         <div className="space-y-2">
                             {qualityOptions.map((option) => (
                                 <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
@@ -160,10 +170,10 @@ function SettingsPanel() {
             </div>
 
             <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>Storage Settings</h2>
+                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>{t('settings.storage')}</h2>
                 <div className="space-y-4">
                     <div>
-                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>Storage Location</label>
+                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.storageLocation')}</label>
                         <div className="space-y-2">
                             {storageOptions.map((option) => (
                                 <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
@@ -179,23 +189,23 @@ function SettingsPanel() {
 
                     <label className="flex items-center justify-between cursor-pointer">
                         <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>Cloud Sync</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Sync files across devices</div>
+                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.cloudSync')}</div>
+                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.cloudSync.desc')}</div>
                         </div>
                         <input type="checkbox" checked={settings.cloudSync} onChange={(e) => handleSettingChange('cloudSync', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
                     </label>
 
                     <label className="flex items-center justify-between cursor-pointer">
                         <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>Auto Cleanup</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Automatically delete old files</div>
+                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.autoCleanup')}</div>
+                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.autoCleanup.desc')}</div>
                         </div>
                         <input type="checkbox" checked={settings.autoCleanup} onChange={(e) => handleSettingChange('autoCleanup', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
                     </label>
 
                     {settings.autoCleanup && (
                         <div>
-                            <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>Retention Period (days)</label>
+                            <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.retentionPeriod')}</label>
                             <input type="number" min="1" max="365" value={settings.retentionDays} onChange={(e) => handleSettingChange('retentionDays', parseInt(e.target.value))} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
                         </div>
                     )}
@@ -203,26 +213,26 @@ function SettingsPanel() {
             </div>
 
             <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>Security Settings</h2>
+                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>{t('settings.security')}</h2>
                 <div className="space-y-4">
                     <label className="flex items-center justify-between cursor-pointer">
                         <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>Encrypt Files</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Encrypt processed files for security</div>
+                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.encryptFiles')}</div>
+                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.encryptFiles.desc')}</div>
                         </div>
                         <input type="checkbox" checked={settings.encryptFiles} onChange={(e) => handleSettingChange('encryptFiles', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
                     </label>
 
                     <label className="flex items-center justify-between cursor-pointer">
                         <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>Require Password</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Require password for sensitive operations</div>
+                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.requirePassword')}</div>
+                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.requirePassword.desc')}</div>
                         </div>
                         <input type="checkbox" checked={settings.requirePassword} onChange={(e) => handleSettingChange('requirePassword', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
                     </label>
 
                     <div>
-                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>Session Timeout (minutes)</label>
+                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.sessionTimeout')}</label>
                         <input type="range" min="5" max="120" value={settings.sessionTimeout} onChange={(e) => handleSettingChange('sessionTimeout', parseInt(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
                         <div className="flex justify-between text-sm text-gray-500 mt-1">
                             <span>5 min</span>
@@ -234,9 +244,9 @@ function SettingsPanel() {
             </div>
 
             <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>Actions</h2>
+                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>{t('settings.actions')}</h2>
                 <div className="space-y-3">
-                    <button className={`w-full py-3 px-6 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors ${darkMode ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`} onClick={() => api.saveSettings(settings)}>Save Settings</button>
+                    <button className={`w-full py-3 px-6 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors ${darkMode ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`} onClick={() => api.saveSettings(settings)}>{t('settings.save')}</button>
                     <button className="w-full py-3 px-6 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors" onClick={() => setSettings({
                         autoSave: true,
                         notifications: true,
@@ -253,8 +263,8 @@ function SettingsPanel() {
                         encryptFiles: false,
                         requirePassword: false,
                         sessionTimeout: 30,
-                    })}>Reset to Defaults</button>
-                    <button className={`w-full py-3 px-6 bg-red-100 text-red-700 rounded-xl font-medium hover:bg-red-200 transition-colors ${darkMode ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`} onClick={() => { localStorage.clear(); window.location.reload(); }}>Clear All Data</button>
+                    })}>{t('settings.reset')}</button>
+                    <button className={`w-full py-3 px-6 bg-red-100 text-red-700 rounded-xl font-medium hover:bg-red-200 transition-colors ${darkMode ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`} onClick={() => { localStorage.clear(); window.location.reload(); }}>{t('settings.clearData')}</button>
                 </div>
             </div>
         </div>

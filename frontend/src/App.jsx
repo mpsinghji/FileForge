@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import Sidebar from './components/Sidebar';
 import WorkspaceTabs from './components/WorkspaceTabs';
@@ -11,6 +10,7 @@ import ArchiveExtractionPanel from './components/ArchiveExtractionPanel';
 import HistoryPanel from './components/HistoryPanel';
 import SettingsPanel from './components/SettingsPanel';
 import AuthModal from './components/AuthModal';
+import { useLanguage } from './contexts/LanguageContext';
 import * as api from './services/api';
 
 // Global Dark Mode Context
@@ -31,6 +31,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [logs, setLogs] = useState([]);
+  const { t } = useLanguage();
 
   // Authentication state from persistent store
   const { isAuthenticated, user, logout: logoutStore, checkAuth } = useAuth();
@@ -314,7 +315,7 @@ function App() {
               </div>
               <div className="flex items-center space-x-4">
                 <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                  Welcome, {user?.username || user?.email}
+                  {t('nav.welcome')}, {user?.username || user?.email}
                 </span>
                 <button
                   onClick={toggleDarkMode}
@@ -330,7 +331,7 @@ function App() {
                   onClick={handleLogout}
                   className={`text-sm transition-colors ${darkMode ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
                 >
-                  Logout
+                  {t('nav.logout')}
                 </button>
               </div>
             </div>
