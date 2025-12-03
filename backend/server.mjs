@@ -57,6 +57,11 @@ app.use(compression());
 
 app.use(morgan('combined', { stream: { write: (msg) => logger.info(msg.trim()) } }));
 
+app.use((req, res, next) => {
+  console.log(`[REQUEST DEBUG] ${req.method} ${req.url}`);
+  next();
+});
+
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/processed', express.static(path.join(__dirname, 'processed')));
 
@@ -103,15 +108,15 @@ app.use(errorHandler);
 async function startServer() {
   try {
     console.log('🔄 Starting server initialization...');
-    
+
     console.log('🔄 Connecting to MongoDB...');
     await connectdb();
     console.log('✅ MongoDB connection established');
-    
+
     console.log('🔄 Creating directories...');
     const fs = await import('fs');
     const dirs = ['uploads', 'processed', 'temp'];
-    
+
     for (const dir of dirs) {
       const dirPath = path.join(__dirname, dir);
       if (!fs.existsSync(dirPath)) {
@@ -119,7 +124,7 @@ async function startServer() {
       }
     }
     console.log('✅ Directories created');
-    
+
     console.log('🔄 Starting server...');
     let server;
     if (USE_HTTPS) {
@@ -143,12 +148,12 @@ async function startServer() {
         console.log(`🚀 HTTP server on :${PORT}`);
       });
     }
-    
+
     server.on('error', (error) => {
       console.error('❌ Server error:', error);
       process.exit(1);
     });
-    
+
     console.log('✅ HTTP server started');
 
     // Schedule auto-clean daily at 3 AM
@@ -186,7 +191,7 @@ process.on('unhandledRejection', (reason) => {
   try {
     console.error('Unhandled promise rejection:', reason);
     logger.error('Unhandled promise rejection:', reason);
-  } catch {}
+  } catch { }
 });
 
 // Handle uncaught exceptions
@@ -195,7 +200,7 @@ process.on('uncaughtException', (error) => {
     console.error('Uncaught exception:', error);
     logger.error('Uncaught exception:', error);
     // Don't exit immediately, let the process handle it gracefully
-  } catch {}
+  } catch { }
 });
 
 // Graceful shutdown

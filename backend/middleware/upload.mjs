@@ -5,16 +5,25 @@ import { v4 as uuidv4 } from 'uuid';
 // Configure storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    const dest = 'uploads/';
+    console.log('[UPLOAD STORAGE] Saving incoming file to directory:', dest);
+    cb(null, dest);
   },
   filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}-${Date.now()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
+    // Store using the original file name so uploads appear under the user-provided name
+    const originalName = file.originalname;
+    const safeName = originalName.replace(/[^a-zA-Z0-9_.\-]/g, '_');
+    console.log('[UPLOAD STORAGE] Generated filename for upload:', {
+      original: file.originalname,
+      storedAs: safeName
+    });
+    cb(null, safeName);
   }
 });
 
 // File filter function
 const fileFilter = (req, file, cb) => {
+  console.log(`[UPLOAD DEBUG] Processing file: ${file.originalname}, Mimetype: ${file.mimetype}`);
   const allowedTypes = [
     // Images
     'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/tiff',
@@ -27,23 +36,33 @@ const fileFilter = (req, file, cb) => {
     // Video
     'video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm',
     // Archives
-    'application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed',
-    'application/gzip', 'application/x-tar'
+    'application/zip', 'application/x-zip-compressed', 'application/x-rar-compressed',
+    'application/x-7z-compressed', 'application/gzip', 'application/x-tar',
+    'application/x-rar', 'application/vnd.rar'
   ];
 
-  if (allowedTypes.includes(file.mimetype)) {
+  const archiveExtensions = [
+    '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz', '.tgz', '.tbz2', '.tar.gz', '.tar.bz2', '.tar.xz', '.iso', '.cab'
+  ];
+
+  const fileExt = (path.extname(file.originalname) || '').toLowerCase();
+  const isMimeAllowed = allowedTypes.includes(file.mimetype);
+  const isArchiveByExtension = archiveExtensions.some(ext => file.originalname?.toLowerCase().endsWith(ext));
+
+  if (isMimeAllowed || isArchiveByExtension) {
     cb(null, true);
   } else {
     cb(new Error(`File type ${file.mimetype} is not supported`), false);
   }
 };
 
+
 // Create multer instance with limits
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB
+    fileSize: 500 * 1024 * 1024, // 500MB
     files: 10 // Maximum 10 files
   }
 });
@@ -112,11 +131,12 @@ export const uploadMedia = multer({
 
 // Error handling wrapper
 export const handleUploadError = (err, req, res, next) => {
+  console.error('[UPLOAD ERROR DEBUG]', err);
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         success: false,
-        error: 'File too large. Maximum size is 100MB per file.'
+        error: 'File too large. Maximum size is 500MB per file.'
       });
     }
     if (err.code === 'LIMIT_FILE_COUNT') {
@@ -132,13 +152,13 @@ export const handleUploadError = (err, req, res, next) => {
       });
     }
   }
-  
+
   if (err.message) {
     return res.status(400).json({
       success: false,
       error: err.message
     });
   }
-  
+
   next(err);
 };

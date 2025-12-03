@@ -6,3 +6,15 @@ dist/
 backend/reset_user.mjs
 backend/test_7z.mjs
 backend/test_extraction_endpoint.mjs
+
+# Temporary Debug Files
+backend/fake.rar
+backend/repro_archive.mjs
+backend/reproduce_issue.mjs
+backend/test_7zip_binary.mjs
+backend/verify_fix.mjs
+
+# Data Directories
+backend/uploads/
+backend/processed/
+backend/temp_repro/

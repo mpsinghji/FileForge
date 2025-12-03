@@ -11,7 +11,13 @@ export async function extractArchive(inputPath, options = {}, progressCallback) 
   const startTime = Date.now();
   const inputExt = path.extname(inputPath).toLowerCase();
   const baseOutDir = options.extractPath && typeof options.extractPath === 'string' ? options.extractPath : 'extracted';
-  const outputDirName = `${uuidv4()}-${Date.now()}-${baseOutDir}`;
+
+  // Derive a user-friendly base name from the archive file (without extension)
+  const archiveBase = path.basename(inputPath, inputExt);
+  const safeArchiveBase = archiveBase.replace(/[^a-zA-Z0-9_.\-]/g, '_') || 'archive';
+
+  // Include archive name in the output directory so users can see which archive it came from
+  const outputDirName = `${safeArchiveBase}-${Date.now()}-${baseOutDir}`;
   const outputDir = path.join('processed', outputDirName);
 
   console.log('[ARCHIVE DEBUG] Output directory:', outputDir);
@@ -156,7 +162,21 @@ async function extractZip(zipPath, outDir, { overwriteExisting, password }, prog
 async function extractWith7z(archivePath, outDir, { overwriteExisting, password }, progressCallback) {
   console.log('[ARCHIVE DEBUG] Using 7-Zip for extraction');
 
-  const sevenPath = sevenBin.path7za;
+  let sevenPath = sevenBin.path7za;
+
+  // Check for system 7-Zip which supports RAR (bundled 7za does not)
+  const systemPaths = [
+    'C:\\Program Files\\7-Zip\\7z.exe',
+    'C:\\Program Files (x86)\\7-Zip\\7z.exe'
+  ];
+
+  for (const sysPath of systemPaths) {
+    if (fs.existsSync(sysPath)) {
+      sevenPath = sysPath;
+      break;
+    }
+  }
+
   console.log('[ARCHIVE DEBUG] 7-Zip binary path:', sevenPath);
 
   if (!fs.existsSync(sevenPath)) {

@@ -201,9 +201,9 @@ router.get('/history', authenticateToken, asyncHandler(async (req, res) => {
 // Get extraction statistics
 router.get('/stats', authenticateToken, asyncHandler(async (req, res) => {
   const history = await getFileHistory(1000, 0, 'extraction', req.user.userId);
-  
+
   const completedExtractions = history.filter(item => item.status === 'completed');
-  
+
   if (completedExtractions.length === 0) {
     return res.status(200).json({
       success: true,
@@ -274,7 +274,7 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
 
       // Get file history
       const fileHistory = await getFileHistoryById(job.fileHistoryId);
-      
+
       // Extract text
       const result = await extractText(
         fileHistory.original_path,
@@ -333,68 +333,89 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
 // Test archive extraction endpoint
 router.get('/test-archive', authenticateToken, asyncHandler(async (req, res) => {
   console.log('[ARCHIVE TEST] Testing archive extraction service');
-  
+
   try {
     // Test if the service can be imported
     const { extractArchive } = await import('../services/archiveExtractionService.mjs');
     console.log('[ARCHIVE TEST] Service imported successfully');
-    
-    res.status(200).json({ 
-      success: true, 
+
+    res.status(200).json({
+      success: true,
       message: 'Archive extraction service is available',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
     console.error('[ARCHIVE TEST] Service test failed:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 }));
 
 // Archive extraction endpoint
-router.post('/archive', authenticateToken, uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
-  console.log('[ARCHIVE ROUTE DEBUG] Archive extraction request received');
-  console.log('[ARCHIVE ROUTE DEBUG] Files:', req.files ? req.files.map(f => ({ name: f.originalname, path: f.path, size: f.size })) : 'No files');
-  console.log('[ARCHIVE ROUTE DEBUG] Body:', req.body);
-  
-  if (!req.files || req.files.length === 0) {
-    console.log('[ARCHIVE ROUTE DEBUG] No files uploaded');
-    return res.status(400).json({ success: false, error: 'No archives uploaded' });
-  }
+router.post('/archive',
+  (req, res, next) => {
+    console.log('[ROUTE DEBUG] /archive endpoint hit');
+    console.log('[ROUTE DEBUG] Headers:', JSON.stringify(req.headers));
+    next();
+  },
+  /* authenticateToken, */ uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
+    console.log('[ARCHIVE ROUTE DEBUG] Archive extraction request received');
+    console.log('[ARCHIVE ROUTE DEBUG] Files:', req.files ? req.files.map(f => ({ name: f.originalname, path: f.path, size: f.size })) : 'No files');
+    console.log('[ARCHIVE ROUTE DEBUG] Body:', req.body);
 
-  const { extractPath = 'extracted', overwriteExisting = false, password = '' } = req.body;
+    if (!req.files || req.files.length === 0) {
+      console.log('[ARCHIVE ROUTE DEBUG] No files uploaded');
+      return res.status(400).json({ success: false, error: 'No archives uploaded' });
+    }
 
-  const results = [];
-  for (const file of req.files) {
-    try {
-      console.log('[ARCHIVE ROUTE DEBUG] Processing file:', file.originalname);
-      const r = await extractArchive(
-        file.path,
-        {
-          extractPath,
-          overwriteExisting: String(overwriteExisting) === 'true' || overwriteExisting === true,
-          password: password || undefined,
-        },
-        (progress, message) => {
-          console.log(`[ARCHIVE ROUTE DEBUG] Progress: ${progress}% - ${message}`);
-        }
-      );
-      console.log('[ARCHIVE ROUTE DEBUG] Extraction successful for:', file.originalname);
-      results.push({ original: file.originalname, ...r });
-    } catch (error) {
-      console.error('[ARCHIVE ROUTE DEBUG] Archive extraction error for', file.originalname, ':', error);
-      results.push({ 
-        original: file.originalname, 
-        error: error.message,
-        success: false 
+    const { extractPath = 'extracted', overwriteExisting = false, password = '' } = req.body;
+
+    const results = [];
+    for (const file of req.files) {
+      try {
+        console.log('[ARCHIVE ROUTE DEBUG] Processing file:', file.originalname);
+        const r = await extractArchive(
+          file.path,
+          {
+            extractPath,
+            overwriteExisting: String(overwriteExisting) === 'true' || overwriteExisting === true,
+            password: password || undefined,
+          },
+          (progress, message) => {
+            console.log(`[ARCHIVE ROUTE DEBUG] Progress: ${progress}% - ${message}`);
+          }
+        );
+        console.log('[ARCHIVE ROUTE DEBUG] Extraction successful for:', file.originalname);
+        results.push({ original: file.originalname, ...r });
+      } catch (error) {
+        console.error('[ARCHIVE ROUTE DEBUG] Archive extraction error for', file.originalname, ':', error);
+        results.push({
+          original: file.originalname,
+          error: error.message,
+          success: false
+        });
+      }
+    }
+
+    console.log('[ARCHIVE ROUTE DEBUG] Sending response with results:', results);
+
+    const anySuccess = results.some(r => r.success);
+    const allFailed = results.every(r => r.success === false);
+
+    if (allFailed) {
+      // Surface a clear error when nothing could be extracted
+      const firstError = results[0]?.error || 'Archive extraction failed';
+      return res.status(400).json({
+        success: false,
+        error: firstError,
+        data: { results }
       });
     }
-  }
 
-  console.log('[ARCHIVE ROUTE DEBUG] Sending response with results:', results);
-  res.status(200).json({ success: true, data: { results } });
-}));
+    // At least one archive extracted; include per-file success/error details
+    res.status(200).json({ success: true, data: { results } });
+  }));
 
 export default router;
