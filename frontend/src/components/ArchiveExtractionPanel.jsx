@@ -24,23 +24,7 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 	return (
 		<div className="space-y-6">
 			{/* 7-Zip Notice */}
-			<div className={`rounded-lg p-4 ${darkMode ? 'bg-yellow-900 border-yellow-700' : 'bg-yellow-50 border-yellow-200'} border`}>
-				<div className="flex items-start space-x-3">
-					<span className="text-yellow-600 text-xl">⚠️</span>
-					<div>
-						<h4 className={`font-medium ${darkMode ? 'text-yellow-200' : 'text-yellow-800'}`}>
-							Archive Format Support
-						</h4>
-						<p className={`text-sm mt-1 ${darkMode ? 'text-yellow-300' : 'text-yellow-700'}`}>
-							ZIP files work out of the box. For RAR, 7z, TAR, and other formats, please install{' '}
-							<a href="https://www.7-zip.org/" target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
-								7-Zip
-							</a>{' '}
-							on your system.
-						</p>
-					</div>
-				</div>
-			</div>
+
 
 			<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 				<div className="flex items-center space-x-3 mb-4">
@@ -63,7 +47,7 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 
 					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Extraction Settings</h2>
-						
+
 						<div className="mb-6">
 							<label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
 								Extract to Folder
@@ -73,9 +57,8 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 								value={extractPath}
 								onChange={(e) => setExtractPath(e.target.value)}
 								placeholder="Enter folder name"
-								className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
-									darkMode ? 'border-gray-600 bg-gray-700 text-white' : 'border-gray-300'
-								}`}
+								className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'border-gray-600 bg-gray-700 text-white' : 'border-gray-300'
+									}`}
 							/>
 							<p className={`text-sm mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Files will be extracted to: ./{extractPath}/</p>
 						</div>
@@ -89,9 +72,8 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 								value={extractPassword}
 								onChange={(e) => setExtractPassword(e.target.value)}
 								placeholder="Enter password if archive is protected"
-								className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
-									darkMode ? 'border-gray-600 bg-gray-700 text-white' : 'border-gray-300'
-								}`}
+								className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'border-gray-600 bg-gray-700 text-white' : 'border-gray-300'
+									}`}
 							/>
 						</div>
 
@@ -128,18 +110,17 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 				<div className="space-y-6">
 					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Process Controls</h2>
-						
+
 						<div className="space-y-4">
-					<button
-						onClick={() => onProcess('archive-extraction', { extractPath, overwriteExisting, password: extractPassword })}
+							<button
+								onClick={() => onProcess('archive-extraction', { extractPath, overwriteExisting, password: extractPassword })}
 								disabled={!canProcess || isProcessing}
-								className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all duration-200 ${
-									canProcess && !isProcessing
+								className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all duration-200 ${canProcess && !isProcessing
 										? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:shadow-lg hover:scale-105'
-										: darkMode 
+										: darkMode
 											? 'bg-gray-700 text-gray-400 cursor-not-allowed'
 											: 'bg-gray-200 text-gray-400 cursor-not-allowed'
-								}`}
+									}`}
 							>
 								{isProcessing ? (
 									<div className="flex items-center justify-center space-x-2">
@@ -153,30 +134,27 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 
 							<button
 								onClick={onReset}
-								className={`w-full py-3 px-6 rounded-xl font-medium border-2 transition-all duration-200 ${
-									darkMode 
+								className={`w-full py-3 px-6 rounded-xl font-medium border-2 transition-all duration-200 ${darkMode
 										? 'text-gray-300 border-gray-600 hover:border-gray-500 hover:bg-gray-700'
 										: 'text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-								}`}
+									}`}
 							>
 								Reset All
 							</button>
 						</div>
 
 						{files.length > 0 && (
-							<div className={`mt-6 p-4 rounded-xl border ${
-								darkMode 
-									? 'bg-gradient-to-r from-indigo-900 to-blue-900 border-indigo-700' 
+							<div className={`mt-6 p-4 rounded-xl border ${darkMode
+									? 'bg-gradient-to-r from-indigo-900 to-blue-900 border-indigo-700'
 									: 'bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200'
-							}`}>
+								}`}>
 								<h3 className={`font-medium mb-3 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Archive Preview</h3>
 								<div className="space-y-3">
 									{files.map((file, index) => {
 										const fileSize = (file.size / 1024 / 1024).toFixed(2);
 										return (
-											<div key={index} className={`flex items-center justify-between p-3 rounded-lg ${
-												darkMode ? 'bg-gray-700' : 'bg-white'
-											}`}>
+											<div key={index} className={`flex items-center justify-between p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-white'
+												}`}>
 												<div className="flex items-center space-x-3">
 													<span className="text-2xl">📦</span>
 													<div>
@@ -200,9 +178,8 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Supported Formats</h2>
 						<div className="grid grid-cols-2 gap-3">
 							{supportedArchives.map((archive) => (
-								<div key={archive.format} className={`flex items-center space-x-3 p-3 rounded-lg ${
-									darkMode ? 'bg-gray-700' : 'bg-gray-50'
-								}`}>
+								<div key={archive.format} className={`flex items-center space-x-3 p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'
+									}`}>
 									<span className="text-2xl">{archive.icon}</span>
 									<div>
 										<div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{archive.format}</div>

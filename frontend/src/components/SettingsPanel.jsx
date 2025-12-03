@@ -3,11 +3,11 @@ import * as api from '../services/api';
 import { useDarkMode } from '../App';
 
 function SettingsPanel() {
-    const { darkMode } = useDarkMode();
+    const { darkMode, toggleDarkMode } = useDarkMode();
     const [settings, setSettings] = useState({
         autoSave: true,
         notifications: true,
-        darkMode: false,
+        darkMode: darkMode,
         language: 'en',
         maxFileSize: 100,
         concurrentProcessing: 3,
@@ -22,9 +22,14 @@ function SettingsPanel() {
         sessionTimeout: 30,
     });
 
+    // Sync local settings with global dark mode when it changes externally
+    useEffect(() => {
+        setSettings(prev => ({ ...prev, darkMode }));
+    }, [darkMode]);
+
     useEffect(() => {
         const saved = api.loadSettings();
-        if (saved) setSettings((prev) => ({ ...prev, ...saved }));
+        if (saved) setSettings((prev) => ({ ...prev, ...saved, darkMode }));
     }, []);
 
     useEffect(() => {
@@ -33,6 +38,12 @@ function SettingsPanel() {
 
     const handleSettingChange = (key, value) => {
         setSettings(prev => ({ ...prev, [key]: value }));
+    };
+
+    const handleDarkModeToggle = (e) => {
+        const isEnabled = e.target.checked;
+        toggleDarkMode(); // Toggle global theme
+        handleSettingChange('darkMode', isEnabled); // Update local setting
     };
 
     const languages = [
@@ -94,7 +105,7 @@ function SettingsPanel() {
                             <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>Dark Mode</div>
                             <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Use dark theme interface</div>
                         </div>
-                        <input type="checkbox" checked={settings.darkMode} onChange={(e) => handleSettingChange('darkMode', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
+                        <input type="checkbox" checked={darkMode} onChange={handleDarkModeToggle} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
                     </label>
 
                     <div>
