@@ -87,7 +87,7 @@ const authFetch = async (url, options = {}) => {
 // Authentication functions
 export const login = async (email, password) => {
   console.log('Attempting login with:', { email, password: '***' });
-  
+
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: {
@@ -104,7 +104,7 @@ export const login = async (email, password) => {
 
 export const signup = async (username, email, password) => {
   console.log('Attempting signup with:', { username, email, password: '***' });
-  
+
   const response = await fetch(`${API_BASE_URL}/auth/signup`, {
     method: 'POST',
     headers: {
@@ -133,6 +133,19 @@ export const logout = async () => {
 
 export const getProfile = async () => {
   const response = await authFetch(`${API_BASE_URL}/auth/profile`);
+
+  return handleResponse(response);
+};
+
+export const updateProfile = async (data) => {
+  const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(data),
+  });
 
   return handleResponse(response);
 };
@@ -172,7 +185,7 @@ export const convertFile = async (file, targetFormat) => {
 
 export const compressFile = async (file, compressionLevel = 6, quality = 'high', removeMetadata = false) => {
   const formData = new FormData();
-  formData.append('files', file); 
+  formData.append('files', file);
   formData.append('compressionLevel', compressionLevel);
   formData.append('quality', quality);
   formData.append('removeMetadata', removeMetadata);

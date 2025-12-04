@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import * as api from '../services/api';
 import { useDarkMode } from '../App';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../store/useAuth';
 
 function SettingsPanel() {
     const { darkMode, toggleDarkMode } = useDarkMode();
     const { language, setLanguage, t } = useLanguage();
+    const { logout } = useAuth();
     const [settings, setSettings] = useState({
         autoSave: true,
         notifications: true,
@@ -24,6 +26,17 @@ function SettingsPanel() {
         sessionTimeout: 30,
     });
 
+    // Profile state
+    const [profile, setProfile] = useState({
+        username: '',
+        email: '',
+        currentPassword: '',
+        password: '',
+        confirmPassword: ''
+    });
+    const [profileMessage, setProfileMessage] = useState({ type: '', text: '' });
+    const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+
     // Sync local settings with global dark mode when it changes externally
     useEffect(() => {
         setSettings(prev => ({ ...prev, darkMode }));
@@ -37,7 +50,25 @@ function SettingsPanel() {
     useEffect(() => {
         const saved = api.loadSettings();
         if (saved) setSettings((prev) => ({ ...prev, ...saved, darkMode, language }));
+
+        // Load user profile
+        loadUserProfile();
     }, []);
+
+    const loadUserProfile = async () => {
+        try {
+            const response = await api.getProfile();
+            if (response.success) {
+                setProfile(prev => ({
+                    ...prev,
+                    username: response.data.user.username,
+                    email: response.data.user.email
+                }));
+            }
+        } catch (error) {
+            console.error('Failed to load profile:', error);
+        }
+    };
 
     useEffect(() => {
         api.saveSettings(settings);
@@ -59,22 +90,54 @@ function SettingsPanel() {
         handleSettingChange('language', newLang); // Update local setting
     };
 
+    const handleProfileChange = (e) => {
+        const { name, value } = e.target;
+        setProfile(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSaveProfile = async (e) => {
+        e.preventDefault();
+        setProfileMessage({ type: '', text: '' });
+
+        if (profile.password && profile.password !== profile.confirmPassword) {
+            setProfileMessage({ type: 'error', text: 'Passwords do not match' });
+            return;
+        }
+
+        if (profile.password && !profile.currentPassword) {
+            setProfileMessage({ type: 'error', text: 'Current password is required to set a new password' });
+            return;
+        }
+
+        setIsLoadingProfile(true);
+        try {
+            const updateData = {
+                username: profile.username,
+                email: profile.email
+            };
+            if (profile.password) {
+                updateData.password = profile.password;
+                updateData.currentPassword = profile.currentPassword;
+            }
+
+            const response = await api.updateProfile(updateData);
+            if (response.success) {
+                setProfileMessage({ type: 'success', text: 'Profile updated successfully' });
+                setProfile(prev => ({ ...prev, password: '', confirmPassword: '', currentPassword: '' }));
+            } else {
+                setProfileMessage({ type: 'error', text: response.error || 'Failed to update profile' });
+            }
+        } catch (error) {
+            setProfileMessage({ type: 'error', text: error.message || 'Failed to update profile' });
+        } finally {
+            setIsLoadingProfile(false);
+        }
+    };
+
     const languages = [
         { value: 'en', label: 'English' },
         { value: 'es', label: 'Español' },
         { value: 'fr', label: 'Français' },
-    ];
-
-    const qualityOptions = [
-        { value: 'low', label: 'Low', description: 'Faster processing, smaller files' },
-        { value: 'medium', label: 'Medium', description: 'Balanced quality and speed' },
-        { value: 'high', label: 'High', description: 'Best quality, slower processing' },
-    ];
-
-    const storageOptions = [
-        { value: 'local', label: 'Local Storage', description: 'Store files on your device' },
-        { value: 'cloud', label: 'Cloud Storage', description: 'Store files in the cloud' },
-        { value: 'hybrid', label: 'Hybrid', description: 'Use both local and cloud storage' },
     ];
 
     return (
@@ -91,25 +154,94 @@ function SettingsPanel() {
                 </div>
             </div>
 
+            {/* User Profile Section */}
+            <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>User Profile</h2>
+                <form onSubmit={handleSaveProfile} className="space-y-4">
+                    {profileMessage.text && (
+                        <div className={`p-3 rounded-lg ${profileMessage.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                            {profileMessage.text}
+                        </div>
+                    )}
+
+                    <div>
+                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-1`}>Username</label>
+                        <input
+                            type="text"
+                            name="username"
+                            value={profile.username}
+                            onChange={handleProfileChange}
+                            className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                        />
+                    </div>
+
+                    <div>
+                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-1`}>Email</label>
+                        <input
+                            type="email"
+                            name="email"
+                            value={profile.email}
+                            onChange={handleProfileChange}
+                            className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                        />
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <h3 className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-500'} mb-3`}>Change Password (Optional)</h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-1`}>Current Password (Required for password change)</label>
+                                <input
+                                    type="password"
+                                    name="currentPassword"
+                                    value={profile.currentPassword}
+                                    onChange={handleProfileChange}
+                                    placeholder="Current password"
+                                    className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                                />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-1`}>New Password</label>
+                                    <input
+                                        type="password"
+                                        name="password"
+                                        value={profile.password}
+                                        onChange={handleProfileChange}
+                                        placeholder="Leave blank to keep current"
+                                        className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                                    />
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-1`}>Confirm Password</label>
+                                    <input
+                                        type="password"
+                                        name="confirmPassword"
+                                        value={profile.confirmPassword}
+                                        onChange={handleProfileChange}
+                                        placeholder="Confirm new password"
+                                        className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                        <button
+                            type="submit"
+                            disabled={isLoadingProfile}
+                            className={`px-6 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors ${isLoadingProfile ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                            {isLoadingProfile ? 'Saving...' : 'Save Profile'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+
             <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
                 <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>{t('settings.general')}</h2>
                 <div className="space-y-4">
-                    <label className="flex items-center justify-between cursor-pointer">
-                        <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.autoSave')}</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.autoSave.desc')}</div>
-                        </div>
-                        <input type="checkbox" checked={settings.autoSave} onChange={(e) => handleSettingChange('autoSave', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                    </label>
-
-                    <label className="flex items-center justify-between cursor-pointer">
-                        <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.notifications')}</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.notifications.desc')}</div>
-                        </div>
-                        <input type="checkbox" checked={settings.notifications} onChange={(e) => handleSettingChange('notifications', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                    </label>
-
                     <label className="flex items-center justify-between cursor-pointer">
                         <div>
                             <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.darkMode')}</div>
@@ -130,123 +262,8 @@ function SettingsPanel() {
             </div>
 
             <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>{t('settings.processing')}</h2>
-                <div className="space-y-4">
-                    <div>
-                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.maxFileSize')}</label>
-                        <input type="range" min="10" max="500" value={settings.maxFileSize} onChange={(e) => handleSettingChange('maxFileSize', parseInt(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                        <div className="flex justify-between text-sm text-gray-500 mt-1">
-                            <span>10 MB</span>
-                            <span>{settings.maxFileSize} MB</span>
-                            <span>500 MB</span>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.concurrentProcessing')}</label>
-                        <input type="range" min="1" max="10" value={settings.concurrentProcessing} onChange={(e) => handleSettingChange('concurrentProcessing', parseInt(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                        <div className="flex justify-between text-sm text-gray-500 mt-1">
-                            <span>1 file</span>
-                            <span>{settings.concurrentProcessing} files</span>
-                            <span>10 files</span>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.outputQuality')}</label>
-                        <div className="space-y-2">
-                            {qualityOptions.map((option) => (
-                                <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
-                                    <input type="radio" name="quality" value={option.value} checked={settings.outputQuality === option.value} onChange={(e) => handleSettingChange('outputQuality', e.target.value)} className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500" />
-                                    <div>
-                                        <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{option.label}</div>
-                                        <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{option.description}</div>
-                                    </div>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>{t('settings.storage')}</h2>
-                <div className="space-y-4">
-                    <div>
-                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.storageLocation')}</label>
-                        <div className="space-y-2">
-                            {storageOptions.map((option) => (
-                                <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
-                                    <input type="radio" name="storage" value={option.value} checked={settings.storageLocation === option.value} onChange={(e) => handleSettingChange('storageLocation', e.target.value)} className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500" />
-                                    <div>
-                                        <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{option.label}</div>
-                                        <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{option.description}</div>
-                                    </div>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-
-                    <label className="flex items-center justify-between cursor-pointer">
-                        <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.cloudSync')}</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.cloudSync.desc')}</div>
-                        </div>
-                        <input type="checkbox" checked={settings.cloudSync} onChange={(e) => handleSettingChange('cloudSync', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                    </label>
-
-                    <label className="flex items-center justify-between cursor-pointer">
-                        <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.autoCleanup')}</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.autoCleanup.desc')}</div>
-                        </div>
-                        <input type="checkbox" checked={settings.autoCleanup} onChange={(e) => handleSettingChange('autoCleanup', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                    </label>
-
-                    {settings.autoCleanup && (
-                        <div>
-                            <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.retentionPeriod')}</label>
-                            <input type="number" min="1" max="365" value={settings.retentionDays} onChange={(e) => handleSettingChange('retentionDays', parseInt(e.target.value))} className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`} />
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>{t('settings.security')}</h2>
-                <div className="space-y-4">
-                    <label className="flex items-center justify-between cursor-pointer">
-                        <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.encryptFiles')}</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.encryptFiles.desc')}</div>
-                        </div>
-                        <input type="checkbox" checked={settings.encryptFiles} onChange={(e) => handleSettingChange('encryptFiles', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                    </label>
-
-                    <label className="flex items-center justify-between cursor-pointer">
-                        <div>
-                            <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{t('settings.requirePassword')}</div>
-                            <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('settings.requirePassword.desc')}</div>
-                        </div>
-                        <input type="checkbox" checked={settings.requirePassword} onChange={(e) => handleSettingChange('requirePassword', e.target.checked)} className="w-6 h-6 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                    </label>
-
-                    <div>
-                        <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.sessionTimeout')}</label>
-                        <input type="range" min="5" max="120" value={settings.sessionTimeout} onChange={(e) => handleSettingChange('sessionTimeout', parseInt(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-                        <div className="flex justify-between text-sm text-gray-500 mt-1">
-                            <span>5 min</span>
-                            <span>{settings.sessionTimeout} min</span>
-                            <span>120 min</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
                 <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>{t('settings.actions')}</h2>
                 <div className="space-y-3">
-                    <button className={`w-full py-3 px-6 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors ${darkMode ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`} onClick={() => api.saveSettings(settings)}>{t('settings.save')}</button>
                     <button className="w-full py-3 px-6 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors" onClick={() => setSettings({
                         autoSave: true,
                         notifications: true,
@@ -265,6 +282,20 @@ function SettingsPanel() {
                         sessionTimeout: 30,
                     })}>{t('settings.reset')}</button>
                     <button className={`w-full py-3 px-6 bg-red-100 text-red-700 rounded-xl font-medium hover:bg-red-200 transition-colors ${darkMode ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`} onClick={() => { localStorage.clear(); window.location.reload(); }}>{t('settings.clearData')}</button>
+                    <button
+                        className={`w-full py-3 px-6 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors`}
+                        onClick={async () => {
+                            try {
+                                await api.logout();
+                            } catch (e) {
+                                console.error('Logout API failed', e);
+                            }
+                            logout(); // Clear local state
+                            window.location.reload();
+                        }}
+                    >
+                        Logout
+                    </button>
                 </div>
             </div>
         </div>

@@ -185,7 +185,7 @@ router.post('/logout', asyncHandler(async (req, res) => {
         // ignore invalid token on logout
       }
     }
-  } catch (_) {}
+  } catch (_) { }
 
   res.status(200).json({
     success: true,
@@ -196,7 +196,7 @@ router.post('/logout', asyncHandler(async (req, res) => {
 // Get current user profile
 router.get('/profile', asyncHandler(async (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
-  
+
   if (!token) {
     return res.status(401).json({
       success: false,
@@ -217,7 +217,7 @@ router.get('/profile', asyncHandler(async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: { 
+      data: {
         user: {
           id: user._id,
           username: user.username,
@@ -232,6 +232,68 @@ router.get('/profile', asyncHandler(async (req, res) => {
       success: false,
       error: 'Invalid token'
     });
+  }
+}));
+
+// Update user profile
+router.put('/profile', asyncHandler(async (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ success: false, error: 'No token provided' });
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await findUserById(decoded.userId);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    const { username, email, password, currentPassword } = req.body;
+
+    // Verify current password if sensitive changes are being made (password change)
+    // or if we want to enforce it for any profile update (safer)
+    if (password) {
+      if (!currentPassword) {
+        return res.status(400).json({ success: false, error: 'Current password is required to set a new password' });
+      }
+      const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!isMatch) {
+        return res.status(401).json({ success: false, error: 'Incorrect current password' });
+      }
+    }
+
+    // Update fields if provided
+    if (username && username !== user.username) {
+      const existing = await findUserByUsername(username);
+      if (existing) return res.status(400).json({ success: false, error: 'Username already taken' });
+      user.username = username;
+    }
+
+    if (email && email !== user.email) {
+      const existing = await findUserByEmail(email);
+      if (existing) return res.status(400).json({ success: false, error: 'Email already taken' });
+      user.email = email;
+    }
+
+    if (password) {
+      if (password.length < 6) return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+      const saltRounds = 12;
+      user.password_hash = await bcrypt.hash(password, saltRounds);
+    }
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: {
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 }));
 
