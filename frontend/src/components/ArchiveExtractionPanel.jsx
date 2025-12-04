@@ -45,7 +45,7 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 						<FileUpload files={files} setFiles={setFiles} />
 					</div>
 
-					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+					{/* <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Extraction Settings</h2>
 
 						<div className="mb-6">
@@ -103,6 +103,21 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 									<div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Replace files if they already exist</div>
 								</div>
 							</label>
+						</div>
+					</div> */}
+					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Supported Formats</h2>
+						<div className="grid grid-cols-2 gap-3">
+							{supportedArchives.map((archive) => (
+								<div key={archive.format} className={`flex items-center space-x-3 p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'
+									}`}>
+									<span className="text-2xl">{archive.icon}</span>
+									<div>
+										<div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{archive.format}</div>
+										<div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{archive.description}</div>
+									</div>
+								</div>
+							))}
 						</div>
 					</div>
 				</div>
@@ -174,21 +189,7 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 						)}
 					</div>
 
-					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Supported Formats</h2>
-						<div className="grid grid-cols-2 gap-3">
-							{supportedArchives.map((archive) => (
-								<div key={archive.format} className={`flex items-center space-x-3 p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'
-									}`}>
-									<span className="text-2xl">{archive.icon}</span>
-									<div>
-										<div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-800'}`}>{archive.format}</div>
-										<div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{archive.description}</div>
-									</div>
-								</div>
-							))}
-						</div>
-					</div>
+					
 
 					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Progress</h2>
