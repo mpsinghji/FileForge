@@ -40,12 +40,45 @@ function TextExtractionPanel({ files, setFiles, isProcessing, progressPercent, l
 						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Upload Files</h2>
 					<FileUpload files={files} setFiles={setFiles} />
 					</div>
+					<div className={`mt-6 p-4 rounded-xl border ${
+							darkMode 
+								? 'bg-gradient-to-r from-indigo-900 to-blue-900 border-indigo-700' 
+								: 'bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200'
+						}`}>
+							<h3 className={`font-medium mb-3 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Supported File Types</h3>
+							<div className="grid grid-cols-2 gap-2 text-sm">
+								<div className="flex items-center space-x-2">
+									<span>📄</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>PDF Documents</span>
+								</div>
+								<div className="flex items-center space-x-2">
+									<span>🖼️</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Images (JPG, PNG)</span>
+								</div>
+								<div className="flex items-center space-x-2">
+									<span>📝</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Word Documents</span>
+								</div>
+								<div className="flex items-center space-x-2">
+									<span>📊</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Excel Spreadsheets</span>
+								</div>
+								<div className="flex items-center space-x-2">
+									<span>📋</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Text Files</span>
+								</div>
+								{/* <div className="flex items-center space-x-2">
+									<span>🎥</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Video Files</span>
+								</div> */}
+							</div>
+						</div>
 				</div>
 
 				<div className="space-y-6">
 					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 					<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Process Controls</h2>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+					{/* <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
 						<div>
 							<label className={`${darkMode ? 'text-gray-200' : 'text-gray-700'} block text-sm font-medium mb-2`}>OCR Language</label>
 							<select value={ocrLang} onChange={(e) => setOcrLang(e.target.value)} className={`w-full p-3 rounded-xl border ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-white border-gray-300 text-gray-800'}`}>
@@ -59,7 +92,7 @@ function TextExtractionPanel({ files, setFiles, isProcessing, progressPercent, l
 							<input type="checkbox" checked={includeMetadata} onChange={(e) => setIncludeMetadata(e.target.checked)} />
 							<span className={`${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Include metadata</span>
 						</label>
-					</div>
+					</div> */}
 						
 						<div className="space-y-4">
 					<button
@@ -95,39 +128,7 @@ function TextExtractionPanel({ files, setFiles, isProcessing, progressPercent, l
 							</button>
 						</div>
 
-						<div className={`mt-6 p-4 rounded-xl border ${
-							darkMode 
-								? 'bg-gradient-to-r from-indigo-900 to-blue-900 border-indigo-700' 
-								: 'bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200'
-						}`}>
-							<h3 className={`font-medium mb-3 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Supported File Types</h3>
-							<div className="grid grid-cols-2 gap-2 text-sm">
-								<div className="flex items-center space-x-2">
-									<span>📄</span>
-									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>PDF Documents</span>
-								</div>
-								<div className="flex items-center space-x-2">
-									<span>🖼️</span>
-									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Images (JPG, PNG)</span>
-								</div>
-								<div className="flex items-center space-x-2">
-									<span>📝</span>
-									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Word Documents</span>
-								</div>
-								<div className="flex items-center space-x-2">
-									<span>📊</span>
-									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Excel Spreadsheets</span>
-								</div>
-								<div className="flex items-center space-x-2">
-									<span>📋</span>
-									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Text Files</span>
-								</div>
-								<div className="flex items-center space-x-2">
-									<span>🎥</span>
-									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Video Files</span>
-								</div>
-							</div>
-						</div>
+						
 					</div>
 
 					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>

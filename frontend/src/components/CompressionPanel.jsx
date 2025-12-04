@@ -13,7 +13,7 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 		{ value: 'light', label: 'Light', description: 'Minimal compression, fast processing', savings: '10-20%' },
 		{ value: 'medium', label: 'Medium', description: 'Balanced compression and quality', savings: '30-50%' },
 		{ value: 'high', label: 'High', description: 'Maximum compression, smaller files', savings: '50-70%' },
-		{ value: 'extreme', label: 'Extreme', description: 'Ultra compression, may affect quality', savings: '70-90%' },
+		// { value: 'extreme', label: 'Extreme', description: 'Ultra compression, may affect quality', savings: '70-90%' },
 	];
 
 	const canProcess = files.length > 0;
@@ -83,7 +83,7 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 							</div>
 						</div>
 
-						<div className="space-y-4">
+						{/* <div className="space-y-4">
 							<label className="flex items-center space-x-3 cursor-pointer">
 								<input
 									type="checkbox"
@@ -109,7 +109,7 @@ function CompressionPanel({ files, setFiles, isProcessing, progressPercent, logs
 									<div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Strip EXIF data and other metadata for smaller files</div>
 								</div>
 							</label>
-						</div>
+						</div> */}
 					</div>
 				</div>
 

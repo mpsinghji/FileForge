@@ -10,14 +10,14 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 	const [overwriteExisting, setOverwriteExisting] = useState(false);
 	const [extractPassword, setExtractPassword] = useState('');
 
-	const supportedArchives = [
-		{ format: 'ZIP', icon: '📦', description: 'ZIP Archive', extensions: ['.zip'] },
-		{ format: 'RAR', icon: '📦', description: 'RAR Archive', extensions: ['.rar'] },
-		{ format: '7Z', icon: '📦', description: '7-Zip Archive', extensions: ['.7z'] },
-		{ format: 'TAR', icon: '📦', description: 'TAR Archive', extensions: ['.tar', '.tar.gz', '.tar.bz2'] },
-		{ format: 'ISO', icon: '💿', description: 'ISO Image', extensions: ['.iso'] },
-		{ format: 'CAB', icon: '📦', description: 'CAB Archive', extensions: ['.cab'] },
-	];
+	// const supportedArchives = [
+	// 	{ format: 'ZIP', icon: '📦', description: 'ZIP Archive', extensions: ['.zip'] },
+	// 	{ format: 'RAR', icon: '📦', description: 'RAR Archive', extensions: ['.rar'] },
+	// 	{ format: '7Z', icon: '📦', description: '7-Zip Archive', extensions: ['.7z'] },
+	// 	{ format: 'TAR', icon: '📦', description: 'TAR Archive', extensions: ['.tar', '.tar.gz', '.tar.bz2'] },
+	// 	{ format: 'ISO', icon: '💿', description: 'ISO Image', extensions: ['.iso'] },
+	// 	{ format: 'CAB', icon: '📦', description: 'CAB Archive', extensions: ['.cab'] },
+	// ];
 
 	const canProcess = files.length > 0;
 
@@ -105,7 +105,7 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 							</label>
 						</div>
 					</div> */}
-					<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+					{/* <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
 						<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Supported Formats</h2>
 						<div className="grid grid-cols-2 gap-3">
 							{supportedArchives.map((archive) => (
@@ -119,7 +119,40 @@ function ArchiveExtractionPanel({ files, setFiles, isProcessing, progressPercent
 								</div>
 							))}
 						</div>
-					</div>
+					</div> */}
+					<div className={`mt-6 p-4 rounded-xl border ${
+							darkMode 
+								? 'bg-gradient-to-r from-indigo-900 to-blue-900 border-indigo-700' 
+								: 'bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200'
+						}`}>
+							<h3 className={`font-medium mb-3 ${darkMode ? 'text-white' : 'text-gray-800'}`}>Supported File Types</h3>
+							<div className="grid grid-cols-2 gap-2 text-sm">
+								<div className="flex items-center space-x-2">
+									<span>📦</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>ZIP</span>
+								</div>
+								<div className="flex items-center space-x-2">
+									<span>📦</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>RAR</span>
+								</div>
+								<div className="flex items-center space-x-2">
+									<span>📦</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>7Z</span>
+								</div>
+								<div className="flex items-center space-x-2">
+									<span>📦</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>TAR</span>
+								</div>
+								<div className="flex items-center space-x-2">
+									<span>💿</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>ISO</span>
+								</div>
+								<div className="flex items-center space-x-2">
+									<span>📦</span>
+									<span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>CAB</span>
+								</div>
+							</div>
+						</div>
 				</div>
 
 				<div className="space-y-6">

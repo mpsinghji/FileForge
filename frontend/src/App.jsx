@@ -307,7 +307,7 @@ function App() {
     <DarkModeContext.Provider value={{ darkMode, toggleDarkMode }}>
       <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gradient-to-br from-slate-50 to-blue-50'}`}>
         {/* User info and logout button */}
-        <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm border-b`}>
+        {/* <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm border-b`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-4">
               <div className="flex items-center">
@@ -336,7 +336,7 @@ function App() {
               </div>
             </div>
           </div>
-        </div>
+        </div> */}
 
         <div className="flex h-screen">
           <Sidebar activePanel={activePanel} setActivePanel={(p) => { setActivePanel(p); const t = tabs.find(t => t.id === activeTabId); if (t) setTabPanel(t.id, p); }} />
