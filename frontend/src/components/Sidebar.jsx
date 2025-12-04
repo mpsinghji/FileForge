@@ -65,10 +65,10 @@ function Sidebar({ activePanel, setActivePanel }) {
             key={item.id}
             onClick={() => setActivePanel(item.id)}
             className={`w-full p-4 rounded-xl text-left transition-all duration-200 group hover:shadow-md ${activePanel === item.id
-                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg'
-                : darkMode
-                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                  : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+              ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg'
+              : darkMode
+                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
               }`}
           >
             <div className="flex items-center space-x-3">
@@ -93,8 +93,8 @@ function Sidebar({ activePanel, setActivePanel }) {
 
       <div className={`p-4 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
         <div className={`rounded-lg p-3 ${darkMode
-            ? 'bg-gradient-to-r from-indigo-900 to-blue-900'
-            : 'bg-gradient-to-r from-indigo-50 to-blue-50'
+          ? 'bg-gradient-to-r from-indigo-900 to-blue-900'
+          : 'bg-gradient-to-r from-indigo-50 to-blue-50'
           }`}>
           <div className="flex items-center space-x-2">
           </div>

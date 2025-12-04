@@ -120,7 +120,7 @@ function SettingsPanel() {
 
                     <div>
                         <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.language')}</label>
-                        <select value={language} onChange={handleLanguageChange} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                        <select value={language} onChange={handleLanguageChange} className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}>
                             {languages.map((lang) => (
                                 <option key={lang.value} value={lang.value}>{lang.label}</option>
                             ))}
@@ -206,7 +206,7 @@ function SettingsPanel() {
                     {settings.autoCleanup && (
                         <div>
                             <label className={`block text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'} mb-2`}>{t('settings.retentionPeriod')}</label>
-                            <input type="number" min="1" max="365" value={settings.retentionDays} onChange={(e) => handleSettingChange('retentionDays', parseInt(e.target.value))} className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+                            <input type="number" min="1" max="365" value={settings.retentionDays} onChange={(e) => handleSettingChange('retentionDays', parseInt(e.target.value))} className={`w-full p-3 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`} />
                         </div>
                     )}
                 </div>

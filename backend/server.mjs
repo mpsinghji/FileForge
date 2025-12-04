@@ -125,6 +125,9 @@ async function startServer() {
     }
     console.log('✅ Directories created');
 
+    // Clean up temporary files on startup
+    await cleanupTempFiles();
+
     console.log('🔄 Starting server...');
     let server;
     if (USE_HTTPS) {
@@ -172,6 +175,28 @@ async function startServer() {
   }
 }
 
+async function cleanupTempFiles() {
+  console.log('🧹 Cleaning up temporary files...');
+  const fs = await import('fs');
+  const dirs = ['uploads', 'temp', 'processed'];
+
+  for (const dir of dirs) {
+    const dirPath = path.join(__dirname, dir);
+    if (fs.existsSync(dirPath)) {
+      try {
+        const files = fs.readdirSync(dirPath);
+        for (const file of files) {
+          if (file === '.gitkeep') continue;
+          fs.unlinkSync(path.join(dirPath, file));
+        }
+      } catch (err) {
+        console.warn(`⚠️ Failed to clean ${dir}:`, err.message);
+      }
+    }
+  }
+  console.log('✅ Temporary files cleaned');
+}
+
 // Handle graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
@@ -188,28 +213,14 @@ startServer();
 
 // Prevent crashes on unhandled rejections
 process.on('unhandledRejection', (reason) => {
-  try {
-    console.error('Unhandled promise rejection:', reason);
-    logger.error('Unhandled promise rejection:', reason);
-  } catch { }
+  console.error('Unhandled promise rejection:', reason);
+  logger.error('Unhandled promise rejection:', reason);
+  process.exit(1); // Exit to allow restart
 });
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
-  try {
-    console.error('Uncaught exception:', error);
-    logger.error('Uncaught exception:', error);
-    // Don't exit immediately, let the process handle it gracefully
-  } catch { }
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  process.exit(0);
+  console.error('Uncaught exception:', error);
+  logger.error('Uncaught exception:', error);
+  process.exit(1); // Exit to allow restart
 });
