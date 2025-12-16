@@ -1,0 +1,9 @@
+{
+    "ignore": [
+        "uploads/*",
+        "processed/*",
+        "temp/*",
+        "logs/*",
+        "eng.traineddata"
+    ]
+}

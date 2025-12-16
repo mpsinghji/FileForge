@@ -14,7 +14,7 @@ if (process.env.NODE_ENV === "development") {
   (async () => {
     try {
       const { default: reloader } = await import("electron-reloader");
-      reloader(import.meta.url, { hardResetMethod: "exit" });
+      reloader(fileURLToPath(import.meta.url), { hardResetMethod: "exit" });
       console.log("✅ Electron reloader active");
     } catch (error) {
       console.log("⚠️ Electron reloader failed:", error);

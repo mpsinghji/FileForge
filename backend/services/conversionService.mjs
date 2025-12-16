@@ -11,21 +11,24 @@ import { marked } from 'marked';
 import ffmpegStatic from 'ffmpeg-static';
 ffmpeg.setFfmpegPath(ffmpegStatic);
 
+// Disable sharp cache to prevent file locking on Windows
+sharp.cache(false);
+
 export async function convertFile(inputPath, targetFormat, progressCallback) {
   const startTime = Date.now();
   const inputExt = path.extname(inputPath).toLowerCase();
-  
+
   const outputFilename = `${uuidv4()}-${Date.now()}.${targetFormat.toLowerCase()}`;
   let outputPath = path.join('processed', outputFilename);
 
   try {
     // Determine file type and conversion method
     const fileType = getFileType(inputExt);
-    
+
     if (progressCallback) progressCallback(10, 'Analyzing file type...');
 
     let result;
-    
+
     switch (fileType) {
       case 'image':
         result = await convertImage(inputPath, outputPath, targetFormat, progressCallback);
@@ -44,30 +47,30 @@ export async function convertFile(inputPath, targetFormat, progressCallback) {
     }
 
     const processingTime = (Date.now() - startTime) / 1000;
-    
+
     const actualOutputPath = outputPath;
     const expectedExtension = `.${targetFormat.toLowerCase()}`;
     const actualExtension = path.extname(actualOutputPath).toLowerCase();
-    
+
     console.log('Final conversion result:');
     console.log('Expected output path:', outputPath);
     console.log('Expected extension:', expectedExtension);
     console.log('Actual extension:', actualExtension);
     console.log('File exists:', fs.existsSync(actualOutputPath));
-    
+
     let finalStats;
     if (fs.existsSync(actualOutputPath)) {
       finalStats = fs.statSync(actualOutputPath);
       console.log('File size:', finalStats.size);
       console.log('Target format requested:', targetFormat);
-      
+
       // If the extension doesn't match, rename the file
       if (actualExtension !== expectedExtension) {
         console.log('WARNING: Extension mismatch! Renaming file...');
         const correctedPath = outputPath.replace(actualExtension, expectedExtension);
         fs.renameSync(actualOutputPath, correctedPath);
         console.log('File renamed to:', correctedPath);
-        
+
         outputPath = correctedPath;
         finalStats = fs.statSync(outputPath);
         console.log('Updated file size after renaming:', finalStats.size);
@@ -97,9 +100,9 @@ async function convertImage(inputPath, outputPath, targetFormat, progressCallbac
 
   const sharpInstance = sharp(inputPath);
   const qualitySettings = getQualitySettings('high');
-  
+
   let result;
-  
+
   switch (targetFormat.toLowerCase()) {
     case 'jpg':
     case 'jpeg':
@@ -139,7 +142,7 @@ async function convertImage(inputPath, outputPath, targetFormat, progressCallbac
   }
 
   if (progressCallback) progressCallback(100, 'Image conversion completed');
-  
+
   return {
     success: true,
     outputPath: outputPath,
@@ -152,7 +155,7 @@ async function convertVideo(inputPath, outputPath, targetFormat, progressCallbac
     if (progressCallback) progressCallback(20, 'Initializing video conversion...');
 
     const qualitySettings = getVideoQualitySettings('high');
-    
+
     let command = ffmpeg(inputPath)
       .outputOptions(qualitySettings.outputOptions)
       .output(outputPath);
@@ -186,7 +189,7 @@ async function convertAudio(inputPath, outputPath, targetFormat, progressCallbac
     if (progressCallback) progressCallback(20, 'Initializing audio conversion...');
 
     const qualitySettings = getAudioQualitySettings('high');
-    
+
     let command = ffmpeg(inputPath)
       .outputOptions(qualitySettings.outputOptions)
       .output(outputPath);
@@ -219,7 +222,7 @@ async function convertDocument(inputPath, outputPath, targetFormat, progressCall
   if (progressCallback) progressCallback(20, 'Processing document...');
 
   const inputExt = path.extname(inputPath).toLowerCase();
-  
+
   if (inputExt === '.pdf' && ['jpg', 'jpeg', 'png', 'webp', 'tiff'].includes(targetFormat.toLowerCase())) {
     await convertPdfToImage(inputPath, outputPath, targetFormat, progressCallback);
   } else if (inputExt === '.txt' && targetFormat === 'pdf') {
@@ -235,7 +238,7 @@ async function convertDocument(inputPath, outputPath, targetFormat, progressCall
   }
 
   if (progressCallback) progressCallback(100, 'Document conversion completed');
-  
+
   return {
     success: true,
     outputPath: outputPath,
@@ -276,7 +279,7 @@ function getFileType(extension) {
   if (videoExts.includes(extension)) return 'video';
   if (audioExts.includes(extension)) return 'audio';
   if (documentExts.includes(extension)) return 'document';
-  
+
   return 'unknown';
 }
 
@@ -441,22 +444,22 @@ async function convertPdfToText(inputPath, outputPath, progressCallback) {
   
 This is a placeholder for PDF text extraction.
 In a full implementation, this would contain the actual extracted text from the PDF file.`;
-  
+
   fs.writeFileSync(outputPath, placeholderText);
 }
 
 async function convertPdfToImage(inputPath, outputPath, targetFormat, progressCallback) {
   if (progressCallback) progressCallback(30, 'Converting PDF to image...');
-  
+
   try {
     const placeholderImage = `Converted PDF: ${path.basename(inputPath)}
 Target format: ${targetFormat}
 Conversion completed at: ${new Date().toISOString()}
 
 This is a placeholder image. In a full implementation, this would contain the actual PDF converted to ${targetFormat} format.`;
-    
+
     fs.writeFileSync(outputPath, placeholderImage);
-    
+
     if (progressCallback) progressCallback(80, 'PDF to image conversion completed');
   } catch (error) {
     throw new Error(`PDF to image conversion failed: ${error.message}`);
@@ -465,12 +468,12 @@ This is a placeholder image. In a full implementation, this would contain the ac
 
 async function createPlaceholderDocument(inputPath, outputPath, targetFormat, progressCallback) {
   if (progressCallback) progressCallback(50, `Creating ${targetFormat} document...`);
-  
+
   const placeholderContent = `Converted document from: ${path.basename(inputPath)}
 Target format: ${targetFormat}
 Conversion completed at: ${new Date().toISOString()}
 
 This is a placeholder document. In a full implementation, this would contain the properly converted content.`;
-  
+
   fs.writeFileSync(outputPath, placeholderContent);
 }
