@@ -12,6 +12,7 @@ import SettingsPanel from './components/SettingsPanel';
 import AuthModal from './components/AuthModal';
 import { useLanguage } from './contexts/LanguageContext';
 import * as api from './services/api';
+import { getJobStatus } from './services/api';
 
 // Global Dark Mode Context
 const DarkModeContext = createContext();
@@ -78,38 +79,105 @@ function App() {
         setLogs(prev => [...prev, `📁 Processing: ${file.name}`]);
         setProgressPercent((i / tabFiles.length) * 50);
 
-        let result;
+        let initialResponse;
         switch (operationType) {
           case 'conversion':
-            result = await api.convertFile(file, options.targetFormat);
+            initialResponse = await api.convertFile(file, options.targetFormat);
             break;
           case 'compression':
-            result = await api.compressFile(file, options.compressionLevel, options.quality, options.removeMetadata);
+            initialResponse = await api.compressFile(file, options.compressionLevel, options.quality, options.removeMetadata);
             break;
           case 'extraction':
           case 'text-extraction':
-            result = await api.extractText(file, options.mode, options.includeMetadata, options.language);
+            initialResponse = await api.extractText(file, options.mode, options.includeMetadata, options.language);
             break;
           case 'archive-extraction':
-            // archive extraction works on the whole selection at once
             if (i === 0) {
-              result = await api.extractArchive(tabFiles, { extractPath: options.extractPath, overwriteExisting: options.overwriteExisting, password: options.password });
+              initialResponse = await api.extractArchive(tabFiles, { extractPath: options.extractPath, overwriteExisting: options.overwriteExisting, password: options.password });
             }
             break;
           default:
             throw new Error(`Unknown operation type: ${operationType}`);
         }
 
-        setProgressPercent(((i + 1) / tabFiles.length) * 100);
-        setLogs(prev => [...prev, `✅ Successfully processed: ${file.name}`]);
-
-        if (result) {
-          setLogs(prev => [...prev, `📁 Converted file: ${result.filename || result.outputPath || 'Unknown'}`]);
-          setLogs(prev => [...prev, `📊 File size: ${result.size || result.outputSize ? ((result.size || result.outputSize) / 1024).toFixed(1) : 'Unknown'} KB`]);
-        } else {
-          setLogs(prev => [...prev, `❌ No conversion result received`]);
+        if (!initialResponse || !initialResponse.success || !initialResponse.data) {
+          throw new Error(initialResponse?.error || 'Failed to start processing');
         }
 
+        // Handle async polling for conversion/compression
+        if (operationType === 'conversion' || operationType === 'compression') {
+          const jobs = initialResponse.data.jobs || [];
+          const currentJob = jobs.find(j => j.originalFile === file.name) || jobs[0];
+
+          if (currentJob && currentJob.jobId) {
+            // Poll for completion
+            let status = 'processing';
+            let resultData = null;
+
+            while (status === 'processing' || status === 'pending') {
+              await new Promise(resolve => setTimeout(resolve, 1000)); // Poll every 1s
+
+              let statusRes;
+              if (operationType === 'compression') {
+                statusRes = await api.getCompressionStatus(currentJob.jobId);
+              } else {
+                statusRes = await api.getJobStatus(currentJob.jobId);
+              }
+
+              if (statusRes.success) {
+                status = statusRes.data.status;
+                resultData = statusRes.data;
+                // Update logs with real-time messages if available
+                if (statusRes.data.logs && statusRes.data.logs.length > 0) {
+                  const lastLog = statusRes.data.logs[statusRes.data.logs.length - 1];
+                  // Optional: enable unique log lines only
+                }
+              } else {
+                throw new Error('Failed to check job status');
+              }
+            }
+
+            if (status === 'completed' && resultData) {
+              setLogs(prev => [...prev, `✅ Successfully processed: ${file.name}`]);
+              setLogs(prev => [...prev, `📁 Converted file: ${resultData.processedFile || resultData.compressedFile || 'Unknown'}`]);
+
+              // Format sizes
+              const formatSize = (bytes) => {
+                if (!bytes) return 'Unknown';
+                if (bytes > 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+                return (bytes / 1024).toFixed(2) + ' KB';
+              };
+
+              const originalSize = resultData.originalSize || file.size; // fallback
+              const newSize = resultData.processedSize || resultData.compressedSize || resultData.outputSize;
+
+              if (newSize) {
+                setLogs(prev => [...prev, `📊 Original size: ${formatSize(originalSize)}`]);
+                setLogs(prev => [...prev, `📉 New size: ${formatSize(newSize)}`]);
+                if (originalSize > 0) {
+                  const ratio = Math.round(((originalSize - newSize) / originalSize) * 100);
+                  setLogs(prev => [...prev, `⚡ Compression: ${ratio}% savings`]);
+                }
+              } else {
+                setLogs(prev => [...prev, `📊 File size: Unknown (Async processing)`]);
+              }
+
+            } else {
+              throw new Error(resultData?.error || 'Processing failed');
+            }
+          } else {
+            // Fallback if no jobId (should not happen with new backend)
+            setLogs(prev => [...prev, `⚠️ Job started but no ID returned. Check History for results.`]);
+          }
+        } else {
+          // Synchronous/Other operations handling
+          setLogs(prev => [...prev, `✅ Successfully processed: ${file.name}`]);
+          if (initialResponse.data) {
+            // ... existing logic for others ...
+          }
+        }
+
+        setProgressPercent(((i + 1) / tabFiles.length) * 100);
         setLogs(prev => [...prev, `🔗 Download available in History tab`]);
       }
 

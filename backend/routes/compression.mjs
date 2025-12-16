@@ -2,7 +2,7 @@ import express from 'express';
 import { uploadMultiple, handleUploadError } from '../middleware/upload.mjs';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
 import { authenticateToken } from '../middleware/auth.mjs';
-import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById } from '../services/databaseService.js';
+import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById, getProcessingJob } from '../services/databaseService.js';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
@@ -18,10 +18,10 @@ router.post('/compress', authenticateToken, uploadMultiple, handleUploadError, a
     });
   }
 
-  const { 
-    compressionLevel = 'medium', 
-    preserveQuality = true, 
-    removeMetadata = false 
+  const {
+    compressionLevel = 'medium',
+    preserveQuality = true,
+    removeMetadata = false
   } = req.body;
 
   // Validate compression level
@@ -124,7 +124,7 @@ router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) =>
       originalSize: fileHistory.file_size,
       compressedFile: fileHistory.processed_filename,
       compressedSize: fileHistory.processed_size,
-      compressionRatio: fileHistory.processed_size ? 
+      compressionRatio: fileHistory.processed_size ?
         Math.round(((fileHistory.file_size - fileHistory.processed_size) / fileHistory.file_size) * 100) : 0,
       downloadUrl: fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null
     }
@@ -182,7 +182,7 @@ router.get('/history', authenticateToken, asyncHandler(async (req, res) => {
   // Calculate compression ratios
   const historyWithRatios = history.map(item => ({
     ...item,
-    compressionRatio: item.processed_size ? 
+    compressionRatio: item.processed_size ?
       Math.round(((item.file_size - item.processed_size) / item.file_size) * 100) : 0
   }));
 
@@ -200,9 +200,9 @@ router.get('/history', authenticateToken, asyncHandler(async (req, res) => {
 // Get compression statistics
 router.get('/stats', authenticateToken, asyncHandler(async (req, res) => {
   const history = await getFileHistory(1000, 0, 'compression');
-  
+
   const completedCompressions = history.filter(item => item.status === 'completed' && item.processed_size);
-  
+
   if (completedCompressions.length === 0) {
     return res.status(200).json({
       success: true,
@@ -274,7 +274,7 @@ async function processCompression(mainJobId, compressionJobs, compressionLevel, 
 
       // Get file history
       const fileHistory = await getFileHistoryById(job.fileHistoryId);
-      
+
       // Compress file
       const result = await compressFile(
         fileHistory.original_path,

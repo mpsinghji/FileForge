@@ -2,7 +2,7 @@ import express from 'express';
 import { uploadMultiple, handleUploadError } from '../middleware/upload.mjs';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
 import { authenticateToken } from '../middleware/auth.mjs';
-import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById } from '../services/databaseService.js';
+import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById, getProcessingJob } from '../services/databaseService.js';
 import { estimateConvertedSize } from '../services/compressionService.mjs';
 import { runWithConcurrency } from '../services/queue.mjs';
 import { v4 as uuidv4 } from 'uuid';
@@ -121,6 +121,7 @@ router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) =>
       logs: job.logs ? JSON.parse(job.logs) : [],
       originalFile: fileHistory.original_filename,
       processedFile: fileHistory.processed_filename,
+      processedSize: fileHistory.processed_size,
       downloadUrl: fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null
     }
   });
@@ -159,15 +160,15 @@ router.post('/estimate', authenticateToken, asyncHandler(async (req, res) => {
   const estimated = estimateConvertedSize(Number(sizeBytes || 0), kind, quality);
   const presets = {
     video: [
-      { name: 'Web MP4 (H.264)', options: ['-c:v libx264','-preset medium','-crf 23','-c:a aac','-b:a 128k'] },
-      { name: 'High Quality', options: ['-c:v libx264','-preset slow','-crf 18','-c:a aac','-b:a 192k'] }
+      { name: 'Web MP4 (H.264)', options: ['-c:v libx264', '-preset medium', '-crf 23', '-c:a aac', '-b:a 128k'] },
+      { name: 'High Quality', options: ['-c:v libx264', '-preset slow', '-crf 18', '-c:a aac', '-b:a 192k'] }
     ],
     audio: [
-      { name: 'Standard MP3', options: ['-c:a mp3','-b:a 128k'] },
-      { name: 'High MP3', options: ['-c:a mp3','-b:a 192k'] }
+      { name: 'Standard MP3', options: ['-c:a mp3', '-b:a 128k'] },
+      { name: 'High MP3', options: ['-c:a mp3', '-b:a 192k'] }
     ],
     image: [
-      { name: 'WebP Balanced', options: ['webpQuality=80','webpEffort=4'] },
+      { name: 'WebP Balanced', options: ['webpQuality=80', 'webpEffort=4'] },
       { name: 'JPEG High', options: ['jpegQuality=90'] }
     ]
   };

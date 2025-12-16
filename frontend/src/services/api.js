@@ -309,6 +309,15 @@ export const getJobStatus = async (jobId) => {
   return handleResponse(response);
 };
 
+export const getCompressionStatus = async (jobId) => {
+  const response = await fetch(`${API_BASE_URL}/compression/status/${jobId}`, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+  return handleResponse(response);
+};
+
 
 export const getHistory = async () => {
   const response = await fetch(`${API_BASE_URL}/history`, {

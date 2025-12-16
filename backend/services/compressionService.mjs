@@ -11,6 +11,9 @@ import sevenBin from '7zip-bin';
 import ffmpegStatic from 'ffmpeg-static';
 ffmpeg.setFfmpegPath(ffmpegStatic);
 
+// Disable sharp cache
+sharp.cache(false);
+
 export async function compressFile(inputPath, compressionLevel = 'medium', preserveQuality = true, removeMetadata = false, progressCallback) {
   const startTime = Date.now();
   const inputExt = path.extname(inputPath).toLowerCase();
@@ -20,11 +23,11 @@ export async function compressFile(inputPath, compressionLevel = 'medium', prese
   try {
     // Determine file type and compression method
     const fileType = getFileType(inputExt);
-    
+
     if (progressCallback) progressCallback(10, 'Analyzing file for compression...');
 
     let result;
-    
+
     switch (fileType) {
       case 'image':
         result = await compressImage(inputPath, outputPath, compressionLevel, preserveQuality, removeMetadata, progressCallback);
@@ -70,19 +73,19 @@ async function compressImage(inputPath, outputPath, compressionLevel, preserveQu
   if (progressCallback) progressCallback(20, 'Loading image for compression...');
 
   const sharpInstance = sharp(inputPath);
-  
+
   // Remove metadata if requested
   if (removeMetadata) {
     sharpInstance.withMetadata(false);
   }
-  
+
   // Apply compression settings based on level
   const compressionSettings = getImageCompressionSettings(compressionLevel, preserveQuality);
-  
+
   // Get original image info
   const imageInfo = await sharpInstance.metadata();
   const originalFormat = imageInfo.format;
-  
+
   // Choose output format based on best compression
   let outputFormat = originalFormat;
   if (compressionLevel === 'extreme' && originalFormat !== 'webp') {
@@ -97,8 +100,8 @@ async function compressImage(inputPath, outputPath, compressionLevel, preserveQu
     case 'jpeg':
     case 'jpg':
       await sharpInstance
-        .jpeg({ 
-          quality: compressionSettings.jpegQuality, 
+        .jpeg({
+          quality: compressionSettings.jpegQuality,
           progressive: true,
           mozjpeg: compressionSettings.useMozjpeg
         })
@@ -106,8 +109,8 @@ async function compressImage(inputPath, outputPath, compressionLevel, preserveQu
       break;
     case 'png':
       await sharpInstance
-        .png({ 
-          compressionLevel: compressionSettings.pngCompression, 
+        .png({
+          compressionLevel: compressionSettings.pngCompression,
           progressive: true,
           adaptiveFiltering: true
         })
@@ -115,8 +118,8 @@ async function compressImage(inputPath, outputPath, compressionLevel, preserveQu
       break;
     case 'webp':
       await sharpInstance
-        .webp({ 
-          quality: compressionSettings.webpQuality, 
+        .webp({
+          quality: compressionSettings.webpQuality,
           effort: compressionSettings.webpEffort,
           nearLossless: compressionSettings.nearLossless
         })
@@ -135,7 +138,7 @@ async function compressVideo(inputPath, outputPath, compressionLevel, preserveQu
     if (progressCallback) progressCallback(20, 'Initializing video compression...');
 
     const compressionSettings = getVideoCompressionSettings(compressionLevel, preserveQuality);
-    
+
     let command = ffmpeg(inputPath)
       .outputOptions(compressionSettings.outputOptions)
       .output(outputPath);
@@ -165,7 +168,7 @@ async function compressAudio(inputPath, outputPath, compressionLevel, progressCa
     if (progressCallback) progressCallback(20, 'Initializing audio compression...');
 
     const compressionSettings = getAudioCompressionSettings(compressionLevel);
-    
+
     let command = ffmpeg(inputPath)
       .outputOptions(compressionSettings.outputOptions)
       .output(outputPath);
@@ -194,7 +197,7 @@ async function compressDocument(inputPath, outputPath, compressionLevel, progres
   if (progressCallback) progressCallback(30, 'Compressing document...');
 
   const inputExt = path.extname(inputPath).toLowerCase();
-  
+
   if (inputExt === '.pdf') {
     // For PDFs, we'll create a compressed version
     // In a real implementation, you'd use pdf-lib or similar
@@ -212,7 +215,7 @@ async function compressArchive(inputPath, outputPath, compressionLevel, progress
 
   // For archives, we'll recompress with different settings
   const compressionSettings = getArchiveCompressionSettings(compressionLevel);
-  
+
   // Create a new archive with higher compression
   const output = fs.createWriteStream(outputPath);
   const archive = archiver('zip', {
@@ -252,7 +255,7 @@ function getFileType(extension) {
   if (audioExts.includes(extension)) return 'audio';
   if (documentExts.includes(extension)) return 'document';
   if (archiveExts.includes(extension)) return 'archive';
-  
+
   return 'unknown';
 }
 
@@ -398,7 +401,7 @@ function getArchiveCompressionSettings(compressionLevel) {
 
 async function compressPdf(inputPath, outputPath, compressionLevel, progressCallback) {
   if (progressCallback) progressCallback(50, 'Compressing PDF...');
-  
+
   // For now, create a placeholder compressed PDF
   // In a real implementation, you'd use pdf-lib or similar
   const placeholderContent = `Compressed PDF from: ${path.basename(inputPath)}
@@ -407,15 +410,15 @@ Compression completed at: ${new Date().toISOString()}
 
 This is a placeholder for PDF compression.
 In a full implementation, this would contain the actual compressed PDF content.`;
-  
+
   fs.writeFileSync(outputPath, placeholderContent);
 }
 
 async function createCompressedArchive(inputPath, outputPath, compressionLevel, progressCallback) {
   if (progressCallback) progressCallback(50, 'Creating compressed archive...');
-  
+
   const compressionSettings = getArchiveCompressionSettings(compressionLevel);
-  
+
   const output = fs.createWriteStream(outputPath);
   const archive = archiver('zip', {
     zlib: { level: compressionSettings.compressionLevel }
