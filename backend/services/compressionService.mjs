@@ -7,6 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { execa } from 'execa';
 import sevenBin from '7zip-bin';
 
+import { getUniqueFilename } from '../utils/fileUtils.mjs';
+
 // Configure ffmpeg path
 import ffmpegStatic from 'ffmpeg-static';
 ffmpeg.setFfmpegPath(ffmpegStatic);
@@ -14,10 +16,20 @@ ffmpeg.setFfmpegPath(ffmpegStatic);
 // Disable sharp cache
 sharp.cache(false);
 
-export async function compressFile(inputPath, compressionLevel = 'medium', preserveQuality = true, removeMetadata = false, progressCallback) {
+export async function compressFile(inputPath, compressionLevel = 'medium', preserveQuality = true, removeMetadata = false, originalFilename, progressCallback) {
   const startTime = Date.now();
   const inputExt = path.extname(inputPath).toLowerCase();
-  const outputFilename = `${uuidv4()}-${Date.now()}-compressed${inputExt}`;
+
+  // Use original filename if provided, otherwise derive from input path
+  const baseName = originalFilename ? path.parse(originalFilename).name : path.parse(inputPath).name;
+  const desiredFilename = `${baseName}${inputExt}`;
+
+  // Ensure output directory exists
+  if (!fs.existsSync('processed')) {
+    fs.mkdirSync('processed');
+  }
+
+  const outputFilename = getUniqueFilename('processed', desiredFilename);
   const outputPath = path.join('processed', outputFilename);
 
   try {
@@ -211,35 +223,33 @@ async function compressDocument(inputPath, outputPath, compressionLevel, progres
 }
 
 async function compressArchive(inputPath, outputPath, compressionLevel, progressCallback) {
-  if (progressCallback) progressCallback(30, 'Recompressing archive...');
+  return new Promise((resolve, reject) => {
+    if (progressCallback) progressCallback(30, 'Recompressing archive...');
 
-  // For archives, we'll recompress with different settings
-  const compressionSettings = getArchiveCompressionSettings(compressionLevel);
+    // For archives, we'll recompress with different settings
+    const compressionSettings = getArchiveCompressionSettings(compressionLevel);
 
-  // Create a new archive with higher compression
-  const output = fs.createWriteStream(outputPath);
-  const archive = archiver('zip', {
-    zlib: { level: compressionSettings.compressionLevel }
+    // Create a new archive with higher compression
+    const output = fs.createWriteStream(outputPath);
+    const archive = archiver('zip', {
+      zlib: { level: compressionSettings.compressionLevel }
+    });
+
+    output.on('close', () => {
+      if (progressCallback) progressCallback(100, 'Archive compression completed');
+      resolve();
+    });
+
+    archive.on('error', (err) => {
+      reject(new Error(`Archive compression failed: ${err.message}`));
+    });
+
+    archive.pipe(output);
+
+    // We'll create a simple recompressed version
+    archive.append(fs.createReadStream(inputPath), { name: path.basename(inputPath) });
+    archive.finalize();
   });
-
-  output.on('close', () => {
-    if (progressCallback) progressCallback(100, 'Archive compression completed');
-  });
-
-  archive.on('error', (err) => {
-    throw new Error(`Archive compression failed: ${err.message}`);
-  });
-
-  archive.pipe(output);
-
-  // Extract and recompress the original archive
-  const extractPath = path.join('temp', uuidv4());
-  fs.mkdirSync(extractPath, { recursive: true });
-
-  // For now, we'll create a simple recompressed version
-  // In a real implementation, you'd extract and recompress
-  archive.append(fs.createReadStream(inputPath), { name: path.basename(inputPath) });
-  archive.finalize();
 }
 
 // Helper functions
@@ -415,26 +425,29 @@ In a full implementation, this would contain the actual compressed PDF content.`
 }
 
 async function createCompressedArchive(inputPath, outputPath, compressionLevel, progressCallback) {
-  if (progressCallback) progressCallback(50, 'Creating compressed archive...');
+  return new Promise((resolve, reject) => {
+    if (progressCallback) progressCallback(50, 'Creating compressed archive...');
 
-  const compressionSettings = getArchiveCompressionSettings(compressionLevel);
+    const compressionSettings = getArchiveCompressionSettings(compressionLevel);
 
-  const output = fs.createWriteStream(outputPath);
-  const archive = archiver('zip', {
-    zlib: { level: compressionSettings.compressionLevel }
+    const output = fs.createWriteStream(outputPath);
+    const archive = archiver('zip', {
+      zlib: { level: compressionSettings.compressionLevel }
+    });
+
+    output.on('close', () => {
+      if (progressCallback) progressCallback(100, 'Archive created');
+      resolve();
+    });
+
+    archive.on('error', (err) => {
+      reject(new Error(`Archive creation failed: ${err.message}`));
+    });
+
+    archive.pipe(output);
+    archive.append(fs.createReadStream(inputPath), { name: path.basename(inputPath) });
+    archive.finalize();
   });
-
-  output.on('close', () => {
-    if (progressCallback) progressCallback(100, 'Archive created');
-  });
-
-  archive.on('error', (err) => {
-    throw new Error(`Archive creation failed: ${err.message}`);
-  });
-
-  archive.pipe(output);
-  archive.append(fs.createReadStream(inputPath), { name: path.basename(inputPath) });
-  archive.finalize();
 }
 
 export async function createArchiveFromFiles(inputPaths, outputFormat = 'zip', compressionLevel = 'medium', archiveName = null, password = null, progressCallback) {

@@ -281,6 +281,7 @@ async function processCompression(mainJobId, compressionJobs, compressionLevel, 
         compressionLevel,
         preserveQuality,
         removeMetadata,
+        fileHistory.original_filename,
         (progress, log) => {
           updateProcessingJob(job.jobId, {
             status: 'processing',

@@ -212,7 +212,7 @@ async function processConversion(mainJobId, conversionJobs, targetFormat) {
     try {
       await updateProcessingJob(job.jobId, { status: 'processing', progress: 0, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Starting conversion...' }]) });
       const fileHistory = await getFileHistoryById(job.fileHistoryId);
-      const result = await convertFile(fileHistory.original_path, targetFormat, (progress, log) => {
+      const result = await convertFile(fileHistory.original_path, targetFormat, fileHistory.original_filename, (progress, log) => {
         updateProcessingJob(job.jobId, { status: 'processing', progress, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: log }]) });
       });
       await updateFileHistory(job.fileHistoryId, { processed_filename: result.filename, processed_path: result.path, processed_size: result.size, processing_time: result.processingTime, status: 'completed' });

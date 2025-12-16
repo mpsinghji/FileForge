@@ -7,6 +7,8 @@ import { fileTypeFromFile } from 'file-type';
 import mammoth from 'mammoth';
 import { marked } from 'marked';
 
+import { getUniqueFilename } from '../utils/fileUtils.mjs';
+
 // Configure ffmpeg path
 import ffmpegStatic from 'ffmpeg-static';
 ffmpeg.setFfmpegPath(ffmpegStatic);
@@ -14,11 +16,20 @@ ffmpeg.setFfmpegPath(ffmpegStatic);
 // Disable sharp cache to prevent file locking on Windows
 sharp.cache(false);
 
-export async function convertFile(inputPath, targetFormat, progressCallback) {
+export async function convertFile(inputPath, targetFormat, originalFilename, progressCallback) {
   const startTime = Date.now();
   const inputExt = path.extname(inputPath).toLowerCase();
 
-  const outputFilename = `${uuidv4()}-${Date.now()}.${targetFormat.toLowerCase()}`;
+  // Use original filename if provided, otherwise derive from input path
+  const baseName = originalFilename ? path.parse(originalFilename).name : path.parse(inputPath).name;
+  const desiredFilename = `${baseName}.${targetFormat.toLowerCase()}`;
+
+  // Ensure output directory exists (it should, but good to be safe)
+  if (!fs.existsSync('processed')) {
+    fs.mkdirSync('processed');
+  }
+
+  const outputFilename = getUniqueFilename('processed', desiredFilename);
   let outputPath = path.join('processed', outputFilename);
 
   try {

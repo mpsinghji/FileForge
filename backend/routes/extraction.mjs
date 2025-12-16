@@ -281,6 +281,7 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
         extractionMode,
         includeMetadata,
         language,
+        fileHistory.original_filename,
         (progress, log) => {
           updateProcessingJob(job.jobId, {
             status: 'processing',
