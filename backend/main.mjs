@@ -11,10 +11,22 @@ dotenv.config({ path: path.join(__dirname, "config/config.env") });
 
 // ✅ Enable electron-reloader in development
 if (process.env.NODE_ENV === "development") {
+  const module = { filename: fileURLToPath(import.meta.url), children: [] };
   (async () => {
     try {
       const { default: reloader } = await import("electron-reloader");
-      reloader(fileURLToPath(import.meta.url), { hardResetMethod: "exit" });
+      reloader(module, {
+        ignore: [
+          '**/processed/**',
+          '**/uploads/**',
+          '**/temp/**',
+          '**/*.txt',
+          '**/*.pdf',
+          '**/*.docx',
+          '**/*.png',
+          '**/*.jpg'
+        ]
+      });
       console.log("✅ Electron reloader active");
     } catch (error) {
       console.log("⚠️ Electron reloader failed:", error);

@@ -13,6 +13,7 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [successMessage, setSuccessMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const { darkMode } = useDarkMode();
   const { login: loginStore, setLoading, setError } = useAuth();
@@ -30,6 +31,7 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
         [name]: ''
       }));
     }
+    if (successMessage) setSuccessMessage('');
   };
 
   const validateForm = () => {
@@ -58,7 +60,9 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
     if (!validateForm()) return;
 
     setIsLoading(true);
+    setIsLoading(true);
     setErrors({});
+    setSuccessMessage('');
 
     try {
       let response;
@@ -69,28 +73,39 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       }
 
       if (response.success) {
-        // Store tokens and user data in Zustand store (persistent)
-        const accessToken = response.data.token?.accessToken || response.data.accessToken;
-        const refreshToken = response.data.token?.refreshToken || response.data.refreshToken;
-        const userData = response.data.user;
+        if (isLogin) {
+          
+          const accessToken = response.data.token?.accessToken || response.data.accessToken;
+          const refreshToken = response.data.token?.refreshToken || response.data.refreshToken;
+          const userData = response.data.user;
 
-        if (accessToken && refreshToken && userData) {
-          loginStore(userData, {
-            accessToken,
-            refreshToken
+          if (accessToken && refreshToken && userData) {
+            loginStore(userData, {
+              accessToken,
+              refreshToken
+            });
+          }
+
+          
+          setFormData({
+            username: '',
+            email: '',
+            password: '',
+            confirmPassword: ''
           });
+
+          onAuthSuccess(response.data);
+          onClose();
+        } else {
+          
+          setIsLogin(true);
+          setSuccessMessage('Account created successfully! Please log in with your credentials.');
+          setFormData(prev => ({
+            ...prev,
+            password: '',
+            confirmPassword: ''
+          }));
         }
-
-        // Reset form
-        setFormData({
-          username: '',
-          email: '',
-          password: '',
-          confirmPassword: ''
-        });
-
-        onAuthSuccess(response.data);
-        onClose();
       }
     } catch (error) {
       console.error('Auth error:', error);
@@ -105,6 +120,7 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   const toggleMode = () => {
     setIsLogin(!isLogin);
     setErrors({});
+    setSuccessMessage('');
     setFormData({
       username: '',
       email: '',
@@ -154,6 +170,15 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
               : 'bg-red-50 border-red-200 text-red-700'
               }`}>
               {errors.general}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className={`border px-4 py-3 rounded-lg ${darkMode
+              ? 'bg-green-900 border-green-700 text-green-200'
+              : 'bg-green-50 border-green-200 text-green-700'
+              }`}>
+              {successMessage}
             </div>
           )}
 

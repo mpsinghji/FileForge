@@ -29,6 +29,15 @@ dotenv.config({ path: path.join(__dirname, 'config/config.env') });
 const app = express();
 const PORT = process.env.PORT || 3001;
 const USE_HTTPS = String(process.env.HTTPS || 'false') === 'true';
+const DEFAULT_FRONTEND_ORIGINS = [
+  'http://localhost:5173',
+  'https://mpji-fileforge.vercel.app'
+];
+const configuredOrigins = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+const allowedOrigins = [...new Set([...DEFAULT_FRONTEND_ORIGINS, ...configuredOrigins])];
 
 app.use(helmet({
   crossOriginEmbedderPolicy: false,
@@ -36,7 +45,12 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow non-browser clients and same-origin requests with no Origin header.
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS: origin ${origin} is not allowed`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
