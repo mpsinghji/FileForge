@@ -312,11 +312,35 @@ function HistoryPanel() {
                         </div>
                       </div>
                       
-                      {/* Operation Type Icon */}
-                      <div className={`p-3 rounded-lg ${
-                        darkMode ? 'bg-gray-700' : 'bg-gray-100'
-                      }`}>
-                        <span className="text-2xl">{getOperationIcon(itemData.operation_type)}</span>
+                      <div className="flex items-center gap-3">
+                        {/* Download Buttons */}
+                        <div className="flex flex-col gap-2">
+                          {(itemData.processed_filename || itemData.original_filename) && itemData.status === 'completed' && (
+                            <button
+                              onClick={() => {
+                                const filename = itemData.processed_filename || itemData.original_filename;
+                                api.downloadFile(filename).catch(err => {
+                                  console.error('Download error:', err);
+                                  alert('Failed to download file.');
+                                });
+                              }}
+                              className={`px-3 py-1.5 text-sm rounded-lg font-medium flex items-center transition-colors ${
+                                darkMode 
+                                  ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                                  : 'bg-blue-100 hover:bg-blue-200 text-blue-700'
+                              }`}
+                              title="Download File"
+                            >
+                              ⬇️ Download
+                            </button>
+                          )}
+                        </div>
+                        {/* Operation Type Icon */}
+                        <div className={`p-3 rounded-lg ${
+                          darkMode ? 'bg-gray-700' : 'bg-gray-100'
+                        }`}>
+                          <span className="text-2xl">{getOperationIcon(itemData.operation_type)}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
