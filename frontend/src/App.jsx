@@ -32,6 +32,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [logs, setLogs] = useState([]);
+  const [doneFiles, setDoneFiles] = useState([]);
   const { t } = useLanguage();
 
   // Authentication state from persistent store
@@ -70,6 +71,7 @@ function App() {
     setIsProcessing(true);
     setProgressPercent(0);
     setLogs([]);
+    setDoneFiles([]);
 
     try {
       setLogs(prev => [...prev, '🚀 Starting file processing...']);
@@ -161,6 +163,12 @@ function App() {
               } else {
                 setLogs(prev => [...prev, `📊 File size: Unknown (Async processing)`]);
               }
+              
+              setDoneFiles(prev => [...prev, {
+                originalFile: file.name,
+                processedFile: resultData.processedFile || resultData.compressedFile || resultData.extractedFile || 'Unknown',
+                download_url: resultData.downloadUrl
+              }]);
 
             } else {
               throw new Error(resultData?.error || 'Processing failed');
@@ -232,25 +240,27 @@ function App() {
     setTabFiles(activeTab.id, []);
     setProgressPercent(0);
     setLogs([]);
+    setDoneFiles([]);
   };
 
   const handleDownload = async (item) => {
-    if (item.downloadUrl) {
-      try {
-        const response = await fetch(item.downloadUrl);
-        if (response.ok) {
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = item.result?.filename || `converted_${item.filename}`;
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
-        }
-      } catch (error) {
-        console.error('Download failed:', error);
+    if (item.download_url) {
+      if (item.download_url.startsWith('http')) {
+        const url = new URL(item.download_url);
+        url.searchParams.set('download', item.processedFile || item.originalFile || 'download');
+        const a = document.createElement('a');
+        a.href = url.toString();
+        a.target = '_blank';
+        a.download = item.processedFile || item.originalFile || 'download';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        const filename = item.processedFile || item.originalFile;
+        api.downloadFile(filename).catch(err => {
+          console.error('Download failed:', err);
+          alert('Failed to download file.');
+        });
       }
     }
   };
@@ -272,6 +282,8 @@ function App() {
             isProcessing={isProcessing}
             progressPercent={progressPercent}
             logs={logs}
+            doneFiles={doneFiles}
+            onDownload={handleDownload}
             onProcess={handleProcess}
             onReset={handleReset}
           />
@@ -284,6 +296,8 @@ function App() {
             isProcessing={isProcessing}
             progressPercent={progressPercent}
             logs={logs}
+            doneFiles={doneFiles}
+            onDownload={handleDownload}
             onProcess={handleProcess}
             onReset={handleReset}
           />
@@ -296,6 +310,8 @@ function App() {
             isProcessing={isProcessing}
             progressPercent={progressPercent}
             logs={logs}
+            doneFiles={doneFiles}
+            onDownload={handleDownload}
             onProcess={handleProcess}
             onReset={handleReset}
           />
@@ -308,6 +324,8 @@ function App() {
             isProcessing={isProcessing}
             progressPercent={progressPercent}
             logs={logs}
+            doneFiles={doneFiles}
+            onDownload={handleDownload}
             onProcess={handleProcess}
             onReset={handleReset}
           />
@@ -324,6 +342,8 @@ function App() {
             isProcessing={isProcessing}
             progressPercent={progressPercent}
             logs={logs}
+            doneFiles={doneFiles}
+            onDownload={handleDownload}
             onProcess={handleProcess}
             onReset={handleReset}
           />

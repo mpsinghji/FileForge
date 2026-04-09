@@ -122,7 +122,7 @@ router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) =>
       originalFile: fileHistory.original_filename,
       processedFile: fileHistory.processed_filename,
       processedSize: fileHistory.processed_size,
-      downloadUrl: fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null
+      downloadUrl: fileHistory.download_url || (fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null)
     }
   });
 }));
@@ -215,8 +215,16 @@ async function processConversion(mainJobId, conversionJobs, targetFormat) {
       const result = await convertFile(fileHistory.original_path, targetFormat, fileHistory.original_filename, (progress, log) => {
         updateProcessingJob(job.jobId, { status: 'processing', progress, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: log }]) });
       });
-      await updateFileHistory(job.fileHistoryId, { processed_filename: result.filename, processed_path: result.path, processed_size: result.size, processing_time: result.processingTime, status: 'completed' });
+      
+      const { uploadToSupabase } = await import('../services/supabaseService.js');
+      const supabaseResult = await uploadToSupabase(result.path, `converted/${path.basename(result.path)}`);
+
+      await updateFileHistory(job.fileHistoryId, { processed_filename: result.filename, processed_path: result.path, download_url: supabaseResult.publicUrl, supabase_path: supabaseResult.supabasePath, processed_size: result.size, processing_time: result.processingTime, status: 'completed' });
       await updateProcessingJob(job.jobId, { status: 'completed', progress: 100, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Conversion completed successfully' }]) });
+      
+      if (supabaseResult.publicUrl) {
+        import('fs').then(fsMod => fsMod.unlink(result.path, () => {}));
+      }
     } catch (error) {
       await updateProcessingJob(job.jobId, { status: 'failed', progress: 0, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: `Conversion failed: ${error.message}` }]) });
       await updateFileHistory(job.fileHistoryId, { status: 'failed', error_message: error.message });

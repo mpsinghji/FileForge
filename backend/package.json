@@ -22,6 +22,7 @@
   "type": "module",
   "description": "Backend API for FileForge - File processing, conversion, compression, and OCR",
   "dependencies": {
+    "@supabase/supabase-js": "^2.102.1",
     "7zip-bin": "^5.2.0",
     "archiver": "^6.0.1",
     "bcryptjs": "^2.4.3",

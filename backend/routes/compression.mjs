@@ -126,7 +126,7 @@ router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) =>
       compressedSize: fileHistory.processed_size,
       compressionRatio: fileHistory.processed_size ?
         Math.round(((fileHistory.file_size - fileHistory.processed_size) / fileHistory.file_size) * 100) : 0,
-      downloadUrl: fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null
+      downloadUrl: fileHistory.download_url || (fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null)
     }
   });
 }));
@@ -291,10 +291,15 @@ async function processCompression(mainJobId, compressionJobs, compressionLevel, 
         }
       );
 
+      const { uploadToSupabase } = await import('../services/supabaseService.js');
+      const supabaseResult = await uploadToSupabase(result.path, `compressed/${path.basename(result.path)}`);
+
       // Update file history with results
       await updateFileHistory(job.fileHistoryId, {
         processed_filename: result.filename,
         processed_path: result.path,
+        download_url: supabaseResult.publicUrl,
+        supabase_path: supabaseResult.supabasePath,
         processed_size: result.size,
         processing_time: result.processingTime,
         status: 'completed'
@@ -306,6 +311,10 @@ async function processCompression(mainJobId, compressionJobs, compressionLevel, 
         progress: 100,
         logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Compression completed successfully' }])
       });
+
+      if (supabaseResult.publicUrl) {
+        import('fs').then(fsMod => fsMod.unlink(result.path, () => {}));
+      }
 
     } catch (error) {
       console.error(`Compression failed for job ${job.jobId}:`, error);

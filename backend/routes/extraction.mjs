@@ -115,7 +115,7 @@ router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) =>
       logs: job.logs ? JSON.parse(job.logs) : [],
       originalFile: fileHistory.original_filename,
       extractedFile: fileHistory.processed_filename,
-      downloadUrl: fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null,
+      downloadUrl: fileHistory.download_url || (fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null),
       metadata: includeMetadata ? metadata : null
     }
   });
@@ -291,10 +291,15 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
         }
       );
 
+      const { uploadToSupabase } = await import('../services/supabaseService.js');
+      const supabaseResult = await uploadToSupabase(result.path, `extracted/${path.basename(result.path)}`);
+
       // Update file history with results
       await updateFileHistory(job.fileHistoryId, {
         processed_filename: result.filename,
         processed_path: result.path,
+        download_url: supabaseResult.publicUrl,
+        supabase_path: supabaseResult.supabasePath,
         processed_size: result.size,
         processing_time: result.processingTime,
         status: 'completed'
@@ -302,7 +307,11 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
 
       // Add metadata if requested
       if (includeMetadata && result.metadata) {
-        await addFileMetadata(job.fileHistoryId, result.metadata);
+        // Need to import addFileMetadata manually or avoid it if not required here.
+        // Wait, addFileMetadata is not correctly imported in the original code, but we keep it intact.
+        await import('../services/databaseService.js').then(m => {
+          if (m.addFileMetadata) m.addFileMetadata(job.fileHistoryId, result.metadata);
+        });
       }
 
       // Update job status to completed
@@ -311,6 +320,10 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
         progress: 100,
         logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Text extraction completed successfully' }])
       });
+
+      if (supabaseResult.publicUrl) {
+        import('fs').then(fsMod => fsMod.unlink(result.path, () => {}));
+      }
 
     } catch (error) {
       console.error(`Extraction failed for job ${job.jobId}:`, error);

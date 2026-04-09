@@ -1,6 +1,7 @@
 import User from '../models/User.js';
 import FileHistory from '../models/FileHistory.js';
 import ProcessingJob from '../models/ProcessingJob.js';
+import { deleteFromSupabase } from './supabaseService.js';
 
 // User operations
 export const createUser = async (userData) => {
@@ -100,6 +101,11 @@ export const getFileHistoryById = async (id) => {
 
 export const deleteFileHistory = async (id) => {
   try {
+    const fileHistory = await FileHistory.findById(id);
+    if (fileHistory && fileHistory.supabase_path) {
+      await deleteFromSupabase(fileHistory.supabase_path);
+    }
+    
     // Also delete associated processing jobs
     await ProcessingJob.deleteMany({ file_history_id: id });
     
@@ -193,7 +199,6 @@ export const cleanupOldFiles = async (days = 7, user_id = null) => {
 
     const oldFiles = await FileHistory.find(query);
 
-    // Delete old files from filesystem
     const fs = await import('fs');
     for (const file of oldFiles) {
       try {
@@ -202,6 +207,9 @@ export const cleanupOldFiles = async (days = 7, user_id = null) => {
         }
         if (file.processed_path && fs.existsSync(file.processed_path)) {
           fs.unlinkSync(file.processed_path);
+        }
+        if (file.supabase_path) {
+          await deleteFromSupabase(file.supabase_path);
         }
       } catch (error) {
         console.error(`Failed to delete file: ${error.message}`);

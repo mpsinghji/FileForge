@@ -318,11 +318,27 @@ function HistoryPanel() {
                           {(itemData.processed_filename || itemData.original_filename) && itemData.status === 'completed' && (
                             <button
                               onClick={() => {
-                                const filename = itemData.processed_filename || itemData.original_filename;
-                                api.downloadFile(filename).catch(err => {
-                                  console.error('Download error:', err);
-                                  alert('Failed to download file.');
-                                });
+                                if (itemData.download_url) {
+                                  // Use Supabase public URL
+                                  const url = new URL(itemData.download_url);
+                                  const filename = itemData.processed_filename || itemData.original_filename || 'download';
+                                  url.searchParams.set('download', filename);
+                                  
+                                  const a = document.createElement('a');
+                                  a.href = url.toString();
+                                  a.target = '_blank';
+                                  a.download = filename;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                } else {
+                                  // Fallback to local server bucket
+                                  const filename = itemData.processed_filename || itemData.original_filename;
+                                  api.downloadFile(filename).catch(err => {
+                                    console.error('Download error:', err);
+                                    alert('Failed to download file. It may have been cleaned up from the server.');
+                                  });
+                                }
                               }}
                               className={`px-3 py-1.5 text-sm rounded-lg font-medium flex items-center transition-colors ${
                                 darkMode 

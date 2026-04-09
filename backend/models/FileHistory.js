@@ -22,6 +22,14 @@ const fileHistorySchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  download_url: {
+    type: String,
+    default: null
+  },
+  supabase_path: {
+    type: String,
+    default: null
+  },
   operation_type: {
     type: String,
     required: true,
