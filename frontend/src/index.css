@@ -93,3 +93,32 @@ html {
 .file-preview-container:hover video {
   transform: scale(1.05);
 }
+
+/* ── Progress bar shimmer ─────────────────────── */
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+.animate-shimmer {
+  animation: shimmer 1.6s infinite;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent);
+  width: 60%;
+}
+
+/* ── Compact custom scrollbar (inside log panels) */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #6366f1;
+  border-radius: 99px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #4f46e5;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #818cf8;
+}

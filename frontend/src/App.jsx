@@ -427,7 +427,18 @@ function App() {
         </div> */}
 
         <div className="flex h-screen">
-          <Sidebar activePanel={activePanel} setActivePanel={(p) => { setActivePanel(p); const t = tabs.find(t => t.id === activeTabId); if (t) setTabPanel(t.id, p); }} />
+          <Sidebar activePanel={activePanel} setActivePanel={(p) => {
+              if (p === activePanel) return;
+              const active = tabs.find(t => t.id === activeTabId);
+              if (active) {
+                setTabFiles(active.id, []);
+                setTabPanel(active.id, p);
+              }
+              setProgressPercent(0);
+              setLogs([]);
+              setDoneFiles([]);
+              setActivePanel(p);
+            }} />
 
           <main className="flex-1 overflow-auto">
             <WorkspaceTabs />
