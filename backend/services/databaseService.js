@@ -224,3 +224,58 @@ export const cleanupOldFiles = async (days = 7, user_id = null) => {
     throw error;
   }
 };
+
+// Cleanup expired files based on expires_at field
+export const cleanupExpiredFiles = async () => {
+  try {
+    const now = new Date();
+    
+    // Find all files that have expired
+    const expiredFiles = await FileHistory.find({
+      expires_at: { $lte: now }
+    });
+
+    console.log(`[CLEANUP] Found ${expiredFiles.length} expired files to clean up`);
+
+    let deletedCount = 0;
+    const fs = await import('fs');
+    
+    for (const file of expiredFiles) {
+      try {
+        // Delete from Supabase if exists
+        if (file.supabase_path) {
+          const deleted = await deleteFromSupabase(file.supabase_path);
+          if (deleted) {
+            console.log(`[CLEANUP] Deleted from Supabase: ${file.supabase_path}`);
+          }
+        }
+        
+        // Delete local files if they exist
+        if (file.original_path && fs.existsSync(file.original_path)) {
+          fs.unlinkSync(file.original_path);
+          console.log(`[CLEANUP] Deleted local file: ${file.original_path}`);
+        }
+        if (file.processed_path && fs.existsSync(file.processed_path)) {
+          fs.unlinkSync(file.processed_path);
+          console.log(`[CLEANUP] Deleted processed file: ${file.processed_path}`);
+        }
+        
+        // Delete associated processing jobs
+        await ProcessingJob.deleteMany({ file_history_id: file._id });
+        
+        // Delete the database record
+        await FileHistory.findByIdAndDelete(file._id);
+        deletedCount++;
+        
+      } catch (error) {
+        console.error(`[CLEANUP] Failed to delete file ${file._id}:`, error.message);
+      }
+    }
+
+    console.log(`[CLEANUP] Successfully cleaned up ${deletedCount} expired files`);
+    return deletedCount;
+  } catch (error) {
+    console.error('[CLEANUP] Error during cleanup:', error);
+    throw error;
+  }
+};

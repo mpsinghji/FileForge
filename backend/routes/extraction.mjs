@@ -6,9 +6,33 @@ import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJo
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
-import { extractArchive } from '../services/archiveExtractionService.mjs';
+import { extractArchive, checkArchiveEncryption } from '../services/archiveExtractionService.mjs';
 
 const router = express.Router();
+
+// ─── Password-check endpoint ─────────────────────────────────────────────────
+// POST /api/extraction/archive/check
+// Accepts a single archive file, returns { encrypted: boolean }
+router.post('/archive/check',
+  uploadMultiple, handleUploadError,
+  asyncHandler(async (req, res) => {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+    const file = req.files[0];
+    try {
+      const result = await checkArchiveEncryption(file.path);
+      // Clean up the temp upload
+      try { fs.unlinkSync(file.path); } catch { }
+      return res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      try { fs.unlinkSync(file.path); } catch { }
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  })
+);
+
+
 
 // Text extraction endpoint
 router.post('/extract', authenticateToken, uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
@@ -389,7 +413,7 @@ router.post('/archive',
     const results = [];
     for (const file of req.files) {
       try {
-        console.log('[ARCHIVE ROUTE DEBUG] Processing file:', file.originalname);
+        console.log('[ARCHIVE ROUTE] Processing:', file.originalname);
         const r = await extractArchive(
           file.path,
           {
@@ -398,37 +422,73 @@ router.post('/archive',
             password: password || undefined,
           },
           (progress, message) => {
-            console.log(`[ARCHIVE ROUTE DEBUG] Progress: ${progress}% - ${message}`);
+            console.log(`[ARCHIVE ROUTE] ${progress}% - ${message}`);
           }
         );
-        console.log('[ARCHIVE ROUTE DEBUG] Extraction successful for:', file.originalname);
-        results.push({ original: file.originalname, ...r });
-      } catch (error) {
-        console.error('[ARCHIVE ROUTE DEBUG] Archive extraction error for', file.originalname, ':', error);
+
+        // Bundle the extracted folder into a single ZIP for clean one-click download
+        let download_url = null;
+        let bundleFilename = null;
+        if (r.path && fs.existsSync(r.path)) {
+          try {
+            const archiver = (await import('archiver')).default;
+            const baseName = path.basename(file.originalname, path.extname(file.originalname));
+            bundleFilename = `${baseName}-extracted.zip`;
+            const bundlePath = path.join('processed', bundleFilename);
+            await new Promise((resolve, reject) => {
+              const output = fs.createWriteStream(bundlePath);
+              const archive = archiver('zip', { zlib: { level: 6 } });
+              output.on('close', resolve);
+              archive.on('error', reject);
+              archive.pipe(output);
+              archive.directory(r.path, false);
+              archive.finalize();
+            });
+            try {
+              const { uploadToSupabase } = await import('../services/supabaseService.js');
+              const sup = await uploadToSupabase(bundlePath, `extracted/${bundleFilename}`);
+              download_url = sup.publicUrl;
+              try { fs.unlinkSync(bundlePath); } catch { }
+            } catch (supErr) {
+              console.warn('[ARCHIVE ROUTE] Supabase upload failed:', supErr.message);
+              download_url = `/api/processed/${bundleFilename}`;
+            }
+            try { fs.rmSync(r.path, { recursive: true, force: true }); } catch { }
+          } catch (bundleErr) {
+            console.error('[ARCHIVE ROUTE] Bundle failed:', bundleErr.message);
+          }
+        }
+
         results.push({
           original: file.originalname,
-          error: error.message,
-          success: false
+          success: true,
+          filesExtracted: r.filesExtracted,
+          size: r.size,
+          processingTime: r.processingTime,
+          download_url,
+          filename: bundleFilename || r.filename,
         });
+      } catch (error) {
+        console.error('[ARCHIVE ROUTE] Error for', file.originalname, ':', error.message);
+        let userMessage = error.message;
+        if (userMessage.startsWith('PASSWORD_REQUIRED:')) {
+          userMessage = userMessage.replace('PASSWORD_REQUIRED:', '').trim();
+        } else if (userMessage.startsWith('WRONG_PASSWORD:')) {
+          userMessage = userMessage.replace('WRONG_PASSWORD:', '').trim();
+        }
+        results.push({ original: file.originalname, error: userMessage, success: false });
       }
     }
 
-    console.log('[ARCHIVE ROUTE DEBUG] Sending response with results:', results);
-
-    const anySuccess = results.some(r => r.success);
     const allFailed = results.every(r => r.success === false);
-
     if (allFailed) {
-      // Surface a clear error when nothing could be extracted
       const firstError = results[0]?.error || 'Archive extraction failed';
-      return res.status(400).json({
-        success: false,
+      return res.status(400).json({ 
+        success: false, 
         error: firstError,
-        data: { results }
+        data: { results } 
       });
     }
-
-    // At least one archive extracted; include per-file success/error details
     res.status(200).json({ success: true, data: { results } });
   }));
 

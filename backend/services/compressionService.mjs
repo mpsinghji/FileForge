@@ -410,18 +410,63 @@ function getArchiveCompressionSettings(compressionLevel) {
 }
 
 async function compressPdf(inputPath, outputPath, compressionLevel, progressCallback) {
-  if (progressCallback) progressCallback(50, 'Compressing PDF...');
+  if (progressCallback) progressCallback(50, 'Compressing PDF with Ghostscript...');
 
-  // For now, create a placeholder compressed PDF
-  // In a real implementation, you'd use pdf-lib or similar
-  const placeholderContent = `Compressed PDF from: ${path.basename(inputPath)}
-Compression level: ${compressionLevel}
-Compression completed at: ${new Date().toISOString()}
+  // Map compression levels to Ghostscript settings
+  const gsSettings = {
+    'light': '/screen',      // 72 dpi - lowest quality, smallest size
+    'medium': '/ebook',      // 150 dpi - medium quality
+    'high': '/printer',      // 300 dpi - high quality
+    'extreme': '/screen'     // 72 dpi - maximum compression
+  };
 
-This is a placeholder for PDF compression.
-In a full implementation, this would contain the actual compressed PDF content.`;
+  const setting = gsSettings[compressionLevel] || '/ebook';
 
-  fs.writeFileSync(outputPath, placeholderContent);
+  try {
+    // Use Ghostscript to compress PDF
+    const { execa } = await import('execa');
+    
+    const gsCommand = 'gswin64c'; // Windows Ghostscript command
+    const args = [
+      '-sDEVICE=pdfwrite',
+      '-dCompatibilityLevel=1.4',
+      `-dPDFSETTINGS=${setting}`,
+      '-dNOPAUSE',
+      '-dQUIET',
+      '-dBATCH',
+      `-sOutputFile=${outputPath}`,
+      inputPath
+    ];
+
+    await execa(gsCommand, args);
+    
+    if (progressCallback) progressCallback(100, 'PDF compression completed');
+  } catch (error) {
+    console.error('[PDF COMPRESS] Ghostscript error:', error);
+    
+    // Fallback: If Ghostscript not available, use pdf-lib for basic compression
+    try {
+      const { PDFDocument } = await import('pdf-lib');
+      const pdfBytes = fs.readFileSync(inputPath);
+      const pdfDoc = await PDFDocument.load(pdfBytes);
+      
+      // Save with compression
+      const compressedBytes = await pdfDoc.save({
+        useObjectStreams: true,
+        addDefaultPage: false,
+        objectsPerTick: 50
+      });
+      
+      fs.writeFileSync(outputPath, compressedBytes);
+      
+      if (progressCallback) progressCallback(100, 'PDF compression completed (fallback method)');
+    } catch (fallbackError) {
+      console.error('[PDF COMPRESS] Fallback error:', fallbackError);
+      // Last resort: just copy the file
+      fs.copyFileSync(inputPath, outputPath);
+      if (progressCallback) progressCallback(100, 'PDF copied (compression not available)');
+    }
+  }
 }
 
 async function createCompressedArchive(inputPath, outputPath, compressionLevel, progressCallback) {

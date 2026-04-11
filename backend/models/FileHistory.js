@@ -33,7 +33,7 @@ const fileHistorySchema = new mongoose.Schema({
   operation_type: {
     type: String,
     required: true,
-    enum: ['conversion', 'compression', 'extraction', 'archive_extraction']
+    enum: ['conversion', 'compression', 'extraction', 'archive_extraction', 'archive-create', 'pdf-split', 'pdf-merge', 'file-encrypt', 'file-decrypt', 'qr-generate']
   },
   operation_details: {
     type: mongoose.Schema.Types.Mixed,
@@ -59,6 +59,16 @@ const fileHistorySchema = new mongoose.Schema({
   error_message: {
     type: String,
     default: null
+  },
+  expires_at: {
+    type: Date,
+    default: function() {
+      // Set expiry to 7 days from creation
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + 7);
+      return expiryDate;
+    },
+    index: true
   }
 }, {
   timestamps: true
@@ -67,6 +77,7 @@ const fileHistorySchema = new mongoose.Schema({
 fileHistorySchema.index({ user_id: 1, createdAt: -1 });
 fileHistorySchema.index({ operation_type: 1, status: 1, createdAt: -1 });
 fileHistorySchema.index({ original_filename: 'text' });
+fileHistorySchema.index({ expires_at: 1 }); // Index for efficient expiry queries
 
 const FileHistory = mongoose.model('FileHistory', fileHistorySchema);
 

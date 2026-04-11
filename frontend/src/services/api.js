@@ -279,6 +279,16 @@ export const testArchiveService = async () => {
   return handleResponse(response);
 };
 
+export const checkArchivePassword = async (file) => {
+  const formData = new FormData();
+  formData.append('files', file);
+  const response = await fetch(`${API_BASE_URL}/extraction/archive/check`, {
+    method: 'POST',
+    body: formData,
+  });
+  return handleResponse(response);
+};
+
 export const extractArchive = async (files, { extractPath = 'extracted', overwriteExisting = false, password = '' } = {}) => {
   const formData = new FormData();
   for (const f of files) formData.append('files', f);
@@ -287,7 +297,6 @@ export const extractArchive = async (files, { extractPath = 'extracted', overwri
   if (password) formData.append('password', password);
   const response = await fetch(`${API_BASE_URL}/extraction/archive`, {
     method: 'POST',
-    headers: { ...getAuthHeaders() },
     body: formData,
   });
   return handleResponse(response);
@@ -365,4 +374,103 @@ export const downloadFile = async (filename) => {
   a.click();
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
+};
+
+// PDF Operations
+export const splitPDF = async (file, { mode = 'pages', pagesPerFile = 1, ranges = [] } = {}) => {
+  const formData = new FormData();
+  formData.append('files', file);
+  formData.append('mode', mode);
+  formData.append('pagesPerFile', pagesPerFile);
+  formData.append('ranges', JSON.stringify(ranges));
+
+  const response = await fetch(`${API_BASE_URL}/pdf/split`, {
+    method: 'POST',
+    headers: { ...getAuthHeaders() },
+    body: formData,
+  });
+  return handleResponse(response);
+};
+
+export const mergePDFs = async (files) => {
+  const formData = new FormData();
+  for (const f of files) formData.append('files', f);
+
+  const response = await fetch(`${API_BASE_URL}/pdf/merge`, {
+    method: 'POST',
+    headers: { ...getAuthHeaders() },
+    body: formData,
+  });
+  return handleResponse(response);
+};
+
+// Encryption Operations
+export const encryptFile = async (file, password) => {
+  const formData = new FormData();
+  formData.append('files', file);
+  formData.append('password', password);
+
+  const response = await fetch(`${API_BASE_URL}/encryption/encrypt`, {
+    method: 'POST',
+    headers: { ...getAuthHeaders() },
+    body: formData,
+  });
+  return handleResponse(response);
+};
+
+export const decryptFile = async (file, password) => {
+  const formData = new FormData();
+  formData.append('files', file);
+  formData.append('password', password);
+
+  const response = await fetch(`${API_BASE_URL}/encryption/decrypt`, {
+    method: 'POST',
+    headers: { ...getAuthHeaders() },
+    body: formData,
+  });
+  return handleResponse(response);
+};
+
+// QR Code Operations
+export const generateQRCode = async ({ text, size = 512, format = 'png', errorCorrectionLevel = 'M', darkColor = '#000000', lightColor = '#FFFFFF', margin = 4 } = {}) => {
+  const response = await fetch(`${API_BASE_URL}/qrcode/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ text, size, format, errorCorrectionLevel, darkColor, lightColor, margin }),
+  });
+  return handleResponse(response);
+};
+
+// Archive Creation Operations
+export const createArchive = async (files, { format = 'zip', password, compressionLevel = 5, archiveName } = {}) => {
+  const formData = new FormData();
+  for (const f of files) formData.append('files', f);
+  formData.append('format', format);
+  if (password) formData.append('password', password);
+  formData.append('compressionLevel', compressionLevel);
+  if (archiveName) formData.append('archiveName', archiveName);
+
+  const response = await fetch(`${API_BASE_URL}/archive/create`, {
+    method: 'POST',
+    headers: { ...getAuthHeaders() },
+    body: formData,
+  });
+  return handleResponse(response);
+};
+
+export const getArchiveFormats = async () => {
+  const response = await fetch(`${API_BASE_URL}/archive/formats`, {
+    headers: { ...getAuthHeaders() },
+  });
+  return handleResponse(response);
+};
+
+export const getArchiveCompressionLevels = async () => {
+  const response = await fetch(`${API_BASE_URL}/archive/compression-levels`, {
+    headers: { ...getAuthHeaders() },
+  });
+  return handleResponse(response);
 };

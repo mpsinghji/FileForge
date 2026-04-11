@@ -4,7 +4,7 @@ import FileUpload from './FileUpload';
 import ProgressStatus from './ProgressStatus';
 import * as api from '../services/api';
 
-function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs, onProcess, onReset }) {
+function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs, onProcess, onReset, doneFiles, onDownload }) {
 	const { darkMode } = useDarkMode();
 	const [convertFormat, setConvertFormat] = useState('');
 	const [suggestions, setSuggestions] = useState([]);
@@ -46,6 +46,12 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 		const fileTypes = files.map(getFileType);
 		const uniqueTypes = [...new Set(fileTypes)];
 
+		// Get current file extension to exclude from suggestions
+		const currentExtensions = files.map(f => {
+			const ext = f.name.split('.').pop().toLowerCase();
+			return ext;
+		});
+
 		if (uniqueTypes.length === 1) {
 			const fileType = uniqueTypes[0];
 
@@ -53,7 +59,10 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 				return allFormats.filter(format => format.type === 'image');
 			}
 
-			return allFormats.filter(format => format.type === fileType);
+			// Filter out current format from suggestions
+			return allFormats.filter(format => 
+				format.type === fileType && !currentExtensions.includes(format.value)
+			);
 		}
 
 		return allFormats;
@@ -211,6 +220,36 @@ function ConversionPanel({ files, setFiles, isProcessing, progressPercent, logs,
 							logs={logs}
 						/>
 					</div>
+
+					{/* Download section */}
+					{doneFiles && doneFiles.length > 0 && (
+						<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+							<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>📥 Download Converted Files</h2>
+							<div className="space-y-3">
+								{doneFiles.map((item, idx) => (
+									<div key={idx} className={`flex items-center justify-between p-4 rounded-xl border-2 ${darkMode ? 'bg-gray-700 border-gray-600' : 'bg-indigo-50 border-indigo-200'}`}>
+										<div className="flex items-center gap-3 min-w-0">
+											<span className="text-2xl">📄</span>
+											<div className="min-w-0">
+												<div className={`font-medium text-sm truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.processedFile || item.originalFile}</div>
+												<div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+													Converted from {item.originalFile}
+												</div>
+											</div>
+										</div>
+										{item.download_url && (
+											<button
+												onClick={() => onDownload(item)}
+												className="ml-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:shadow-lg"
+											>
+												⬇️ Download
+											</button>
+										)}
+									</div>
+								))}
+							</div>
+						</div>
+					)}
 				</div>
 			</div>
 		</div>

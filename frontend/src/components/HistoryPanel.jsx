@@ -1,57 +1,71 @@
 import React, { useState, useEffect } from 'react';
 import { useDarkMode } from '../App';
 import * as api from '../services/api';
+import { getLocalHistory, deleteLocalHistoryItem } from '../utils/localHistory';
 
 function HistoryPanel() {
   const [historyItems, setHistoryItems] = useState([]);
+  const [localHistoryItems, setLocalHistoryItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('all');
+  const [sortOrder, setSortOrder] = useState('latest');
   const [searchQuery, setSearchQuery] = useState('');
   const { darkMode } = useDarkMode();
 
-  // Fetch history data from MongoDB
+  // Fetch history data from MongoDB and localStorage
   useEffect(() => {
     fetchHistory();
+    fetchLocalHistory();
   }, []);
 
   const fetchHistory = async () => {
     try {
       setLoading(true);
-      console.log('Fetching history...'); // Debug log
-      
-      // Check if user is authenticated
-      const token = localStorage.getItem('authToken');
-      console.log('Auth token:', token ? 'Present' : 'Missing'); // Debug log
-      
       const response = await api.getHistory();
-      console.log('API Response:', response); // Debug log
       
       if (response.success) {
         const historyData = response.data.history || [];
-        console.log('History Data:', historyData); // Debug log
-        console.log('First item structure:', historyData[0]); // Debug log
-        console.log('Data type:', typeof historyData); // Debug log
-        console.log('Is array:', Array.isArray(historyData)); // Debug log
-        
         setHistoryItems(historyData);
-      } else {
-        console.error('API returned success: false:', response);
       }
     } catch (error) {
-      console.error('Failed to fetch history:', error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      });
+      console.error('Failed to fetch server history:', error);
+      // Don't show error - local history will still work
     } finally {
       setLoading(false);
     }
   };
+  
+  const fetchLocalHistory = () => {
+    const localHistory = getLocalHistory();
+    setLocalHistoryItems(localHistory);
+  };
+  
+  const handleDeleteLocalItem = (id) => {
+    if (deleteLocalHistoryItem(id)) {
+      fetchLocalHistory();
+    }
+  };
 
-  // Helper function to get the actual data from MongoDB document
+  // Helper function to get the actual data from MongoDB document or local storage
   const getItemData = (item) => {
-    // Handle both direct properties and nested _doc properties
+    // Local history items have a different structure
+    if (item.source === 'local') {
+      return {
+        operation_type: item.operationType,
+        original_filename: item.originalFile,
+        processed_filename: item.processedFile,
+        status: item.status,
+        file_size: item.size,
+        createdAt: item.timestamp,
+        totalFiles: item.totalFiles,
+        totalPages: item.totalPages,
+        filesCount: item.filesCount,
+        format: item.format,
+        filesExtracted: item.filesExtracted,
+        processingTime: item.processingTime
+      };
+    }
+    // Handle both direct properties and nested _doc properties for server items
     return item._doc || item;
   };
 
@@ -92,7 +106,13 @@ function HistoryPanel() {
     { value: 'conversion', label: 'Conversions', icon: '🔄' },
     { value: 'compression', label: 'Compressions', icon: '🗜️' },
     { value: 'extraction', label: 'Extractions', icon: '📦' },
-    { value: 'archive_extraction', label: 'Archive Extraction', icon: '📦' },
+    { value: 'archive-extraction', label: 'Archive Extraction', icon: '📦' },
+    { value: 'archive-create', label: 'Archive Creation', icon: '🗜️' },
+    { value: 'pdf-split', label: 'PDF Split', icon: '✂️' },
+    { value: 'pdf-merge', label: 'PDF Merge', icon: '📑' },
+    { value: 'file-encrypt', label: 'Encryption', icon: '🔒' },
+    { value: 'file-decrypt', label: 'Decryption', icon: '🔓' },
+    { value: 'qr-generate', label: 'QR Code', icon: '📱' },
     { value: 'upload', label: 'Uploads', icon: '📁' },
   ];
 
@@ -135,12 +155,65 @@ function HistoryPanel() {
     });
   };
 
-  const filteredItems = historyItems.filter(item => {
+  // Helper function to get file type category
+  const getFileTypeCategory = (filename) => {
+    if (!filename) return 'unknown';
+    const extension = filename.split('.').pop()?.toLowerCase();
+    
+    // Documents
+    if (['pdf', 'doc', 'docx', 'txt', 'rtf', 'xls', 'xlsx', 'csv', 'ppt', 'pptx'].includes(extension)) {
+      return 'documents';
+    }
+    // Images
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'tiff', 'tif'].includes(extension)) {
+      return 'images';
+    }
+    // Archives
+    if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(extension)) {
+      return 'archives';
+    }
+    // Videos
+    if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'].includes(extension)) {
+      return 'videos';
+    }
+    // Audio
+    if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'wma'].includes(extension)) {
+      return 'audio';
+    }
+    // Code
+    if (['js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'json', 'xml', 'py', 'java', 'cpp', 'c', 'php', 'rb', 'go', 'rs'].includes(extension)) {
+      return 'code';
+    }
+    
+    return 'unknown';
+  };
+
+  // Combine server history and local history
+  const allHistoryItems = [
+    ...localHistoryItems.map(item => ({ ...item, source: 'local' })),
+    ...historyItems.map(item => ({ ...item, source: 'server' }))
+  ];
+
+  // Apply filters
+  const filteredItems = allHistoryItems.filter(item => {
     const itemData = getItemData(item);
     const matchesFilter = filterType === 'all' || itemData.operation_type === filterType;
     const name = (itemData.original_filename || '').toLowerCase();
     const matchesSearch = name.includes(searchQuery.toLowerCase());
+    
     return matchesFilter && matchesSearch;
+  });
+
+  // Apply sorting
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    const dateA = new Date(a.timestamp || a.createdAt);
+    const dateB = new Date(b.timestamp || b.createdAt);
+    
+    if (sortOrder === 'latest') {
+      return dateB - dateA; // Newest first
+    } else {
+      return dateA - dateB; // Oldest first
+    }
   });
 
   const totalOps = historyItems.length;
@@ -211,8 +284,9 @@ function HistoryPanel() {
         <div className={`rounded-2xl shadow-lg p-6 ${
           darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white'
         }`}>
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1">
+          <div className="flex flex-col gap-4">
+            {/* Operation Type Filter */}
+            <div>
               <label className={`block text-sm font-medium mb-2 ${
                 darkMode ? 'text-gray-200' : 'text-gray-700'
               }`}>Filter by Operation</label>
@@ -236,7 +310,43 @@ function HistoryPanel() {
               </div>
             </div>
 
-            <div className="lg:w-80">
+            {/* Sort Order */}
+            <div>
+              <label className={`block text-sm font-medium mb-2 ${
+                darkMode ? 'text-gray-200' : 'text-gray-700'
+              }`}>Sort By</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSortOrder('latest')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    sortOrder === 'latest'
+                      ? 'bg-green-500 text-white'
+                      : darkMode 
+                        ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <span className="mr-2">⬇️</span>
+                  Latest First
+                </button>
+                <button
+                  onClick={() => setSortOrder('oldest')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    sortOrder === 'oldest'
+                      ? 'bg-green-500 text-white'
+                      : darkMode 
+                        ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <span className="mr-2">⬆️</span>
+                  Oldest First
+                </button>
+              </div>
+            </div>
+
+            {/* Search */}
+            <div>
               <label className={`block text-sm font-medium mb-2 ${
                 darkMode ? 'text-gray-200' : 'text-gray-700'
               }`}>Search Files</label>
@@ -261,11 +371,11 @@ function HistoryPanel() {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold">Recent Operations</h2>
             <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              {filteredItems.length} of {totalOps} items
+              {sortedItems.length} of {totalOps} items
             </div>
           </div>
 
-          {filteredItems.length === 0 ? (
+          {sortedItems.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-6xl mb-4">📭</div>
               <h3 className="text-lg font-medium mb-2">No history found</h3>
@@ -275,7 +385,7 @@ function HistoryPanel() {
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredItems.map((item, index) => {
+              {sortedItems.map((item, index) => {
                 const itemData = getItemData(item);
                 // Ensure we have a unique key for each item
                 const itemKey = itemData._id || itemData.id || `item-${index}`;
@@ -317,27 +427,53 @@ function HistoryPanel() {
                         <div className="flex flex-col gap-2">
                           {(itemData.processed_filename || itemData.original_filename) && itemData.status === 'completed' && (
                             <button
-                              onClick={() => {
-                                if (itemData.download_url) {
-                                  // Use Supabase public URL
-                                  const url = new URL(itemData.download_url);
-                                  const filename = itemData.processed_filename || itemData.original_filename || 'download';
-                                  url.searchParams.set('download', filename);
-                                  
-                                  const a = document.createElement('a');
-                                  a.href = url.toString();
-                                  a.target = '_blank';
-                                  a.download = filename;
-                                  document.body.appendChild(a);
-                                  a.click();
-                                  document.body.removeChild(a);
-                                } else {
-                                  // Fallback to local server bucket
-                                  const filename = itemData.processed_filename || itemData.original_filename;
-                                  api.downloadFile(filename).catch(err => {
-                                    console.error('Download error:', err);
-                                    alert('Failed to download file. It may have been cleaned up from the server.');
-                                  });
+                              onClick={async () => {
+                                try {
+                                  if (itemData.download_url) {
+                                    console.log('[HISTORY] Download URL:', itemData.download_url);
+                                    
+                                    // Check if it's a full URL or relative path
+                                    if (itemData.download_url.startsWith('http')) {
+                                      // Full URL (Supabase or external) - fetch and download
+                                      const filename = itemData.processed_filename || itemData.original_filename || 'download';
+                                      
+                                      try {
+                                        // Fetch the file
+                                        const response = await fetch(itemData.download_url);
+                                        if (!response.ok) throw new Error('Download failed');
+                                        
+                                        // Get blob
+                                        const blob = await response.blob();
+                                        
+                                        // Create download link
+                                        const url = window.URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.href = url;
+                                        a.download = filename;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        document.body.removeChild(a);
+                                        window.URL.revokeObjectURL(url);
+                                      } catch (fetchErr) {
+                                        console.error('[HISTORY] Fetch failed, trying direct link:', fetchErr);
+                                        // Fallback: try opening in new tab
+                                        window.open(itemData.download_url, '_blank');
+                                      }
+                                    } else {
+                                      // Relative path - construct full URL
+                                      const baseUrl = window.location.origin.replace(':5173', ':3001');
+                                      const fullUrl = `${baseUrl}/${itemData.download_url}`;
+                                      console.log('[HISTORY] Opening local URL:', fullUrl);
+                                      window.open(fullUrl, '_blank');
+                                    }
+                                  } else {
+                                    // Fallback to API download
+                                    const filename = itemData.processed_filename || itemData.original_filename;
+                                    await api.downloadFile(filename);
+                                  }
+                                } catch (err) {
+                                  console.error('[HISTORY] Download error:', err);
+                                  alert('Failed to download file. It may have been cleaned up from the server.');
                                 }
                               }}
                               className={`px-3 py-1.5 text-sm rounded-lg font-medium flex items-center transition-colors ${

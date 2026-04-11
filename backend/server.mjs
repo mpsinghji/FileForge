@@ -7,6 +7,7 @@ import logger from './services/logger.js';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 import uploadRoutes from './routes/upload.mjs';
@@ -15,11 +16,15 @@ import compressionRoutes from './routes/compression.mjs';
 import extractionRoutes from './routes/extraction.mjs';
 import historyRoutes from './routes/history.mjs';
 import authRoutes from './routes/auth.mjs';
+import pdfRoutes from './routes/pdf.mjs';
+import encryptionRoutes from './routes/encryption.mjs';
+import qrcodeRoutes from './routes/qrcode.mjs';
+import archiveRoutes from './routes/archive.mjs';
 
 import { errorHandler } from './middleware/errorHandler.mjs';
 import connectdb from './utils/db.js';
 import cron from 'node-cron';
-import { cleanupOldFiles } from './services/databaseService.js';
+import { cleanupOldFiles, cleanupExpiredFiles } from './services/databaseService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,6 +84,32 @@ app.use((req, res, next) => {
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/processed', express.static(path.join(__dirname, 'processed')));
 
+// Serve processed files with proper headers and download support
+app.get('/processed/*', (req, res) => {
+  const requestedPath = req.path.replace('/processed/', '');
+  const filePath = path.join(__dirname, 'processed', requestedPath);
+  
+  console.log(`[DOWNLOAD] Request for: ${requestedPath}`);
+  console.log(`[DOWNLOAD] Full path: ${filePath}`);
+  
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const filename = path.basename(filePath);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.download(filePath, filename, (err) => {
+      if (err) {
+        console.error(`[DOWNLOAD] Error: ${err.message}`);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Download failed' });
+        }
+      }
+    });
+  } else {
+    console.error(`[DOWNLOAD] File not found: ${filePath}`);
+    res.status(404).json({ error: 'File not found' });
+  }
+});
+
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
@@ -94,6 +125,10 @@ app.use('/api/conversion', conversionRoutes);
 app.use('/api/compression', compressionRoutes);
 app.use('/api/extraction', extractionRoutes);
 app.use('/api/history', historyRoutes);
+app.use('/api/pdf', pdfRoutes);
+app.use('/api/encryption', encryptionRoutes);
+app.use('/api/qrcode', qrcodeRoutes);
+app.use('/api/archive', archiveRoutes);
 
 app.get('/', (req, res) => {
   res.json({
@@ -104,7 +139,11 @@ app.get('/', (req, res) => {
       conversion: '/api/conversion',
       compression: '/api/compression',
       extraction: '/api/extraction',
-      history: '/api/history'
+      history: '/api/history',
+      pdf: '/api/pdf',
+      encryption: '/api/encryption',
+      qrcode: '/api/qrcode',
+      archive: '/api/archive'
     }
   });
 });
@@ -173,16 +212,31 @@ async function startServer() {
 
     console.log('✅ HTTP server started');
 
-    // Schedule auto-clean daily at 3 AM
+    // Schedule hourly cleanup for expired files
+    cron.schedule('0 * * * *', async () => {
+      try {
+        console.log('🧹 Running hourly expired files cleanup...');
+        const deleted = await cleanupExpiredFiles();
+        console.log(`🧹 Hourly cleanup: removed ${deleted} expired files`);
+      } catch (err) {
+        console.error('❌ Hourly cleanup failed:', err);
+      }
+    });
+
+    // Schedule daily cleanup at 3 AM for old files (legacy)
     cron.schedule('0 3 * * *', async () => {
       try {
         const days = parseInt(process.env.CLEANUP_DAYS || '7');
         const deleted = await cleanupOldFiles(days);
-        console.log(`🧹 Auto-clean: removed ${deleted} old records/files (> ${days} days)`);
+        console.log(`🧹 Daily cleanup: removed ${deleted} old records/files (> ${days} days)`);
       } catch (err) {
-        console.error('Auto-clean failed:', err);
+        console.error('❌ Daily cleanup failed:', err);
       }
     });
+
+    console.log('⏰ Scheduled cleanup jobs:');
+    console.log('   - Hourly: Expired files cleanup (every hour)');
+    console.log('   - Daily: Old files cleanup (3 AM)');
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);

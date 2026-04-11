@@ -3,9 +3,19 @@ backend/logs/
 *.log
 .env
 dist/
-backend/reset_user.mjs
-backend/test_7z.mjs
-backend/test_extraction_endpoint.mjs
+
+# Documentation Files (exclude from git)
+*.md
+!README.md
+
+# Script Files (keep local only)
+*.bat
+*.sh
+test*.mjs
+reset*.mjs
+verify*.mjs
+reproduce*.mjs
+repro*.mjs
 
 # Temporary Debug Files
 backend/fake.rar
@@ -13,8 +23,43 @@ backend/repro_archive.mjs
 backend/reproduce_issue.mjs
 backend/test_7zip_binary.mjs
 backend/verify_fix.mjs
+backend/test-cleanup.mjs
 
 # Data Directories
 backend/uploads/
 backend/processed/
+backend/temp/
 backend/temp_repro/
+
+# Frontend Build
+frontend/dist/
+frontend/.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test files
+*.test.js
+*.spec.js
+__tests__/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Coverage
+coverage/
+.nyc_output/

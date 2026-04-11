@@ -7,12 +7,18 @@ import ConversionPanel from './components/ConversionPanel';
 import CompressionPanel from './components/CompressionPanel';
 import TextExtractionPanel from './components/TextExtractionPanel';
 import ArchiveExtractionPanel from './components/ArchiveExtractionPanel';
+import PDFSplitterPanel from './components/PDFSplitterPanel';
+import PDFMergerPanel from './components/PDFMergerPanel';
+import FileEncryptorPanel from './components/FileEncryptorPanel';
+import QRCodePanel from './components/QRCodePanel';
+import ArchiveCreationPanel from './components/ArchiveCreationPanel';
 import HistoryPanel from './components/HistoryPanel';
 import SettingsPanel from './components/SettingsPanel';
 import AuthModal from './components/AuthModal';
 import { useLanguage } from './contexts/LanguageContext';
 import * as api from './services/api';
 import { getJobStatus } from './services/api';
+import { addToLocalHistory } from './utils/localHistory';
 
 // Global Dark Mode Context
 const DarkModeContext = createContext();
@@ -63,7 +69,9 @@ function App() {
   const handleProcess = async (operationType, options = {}) => {
     const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
     const tabFiles = activeTab?.files || [];
-    if (tabFiles.length === 0) {
+    
+    // QR code generation doesn't need files
+    if (operationType !== 'qr-generate' && tabFiles.length === 0) {
       setLogs(prev => [...prev, '❌ No files selected for processing']);
       return;
     }
@@ -75,6 +83,31 @@ function App() {
 
     try {
       setLogs(prev => [...prev, '🚀 Starting file processing...']);
+
+      // Handle QR code generation separately (no files needed)
+      if (operationType === 'qr-generate') {
+        setLogs(prev => [...prev, '📱 Generating QR code...']);
+        setProgressPercent(50);
+        
+        const initialResponse = await api.generateQRCode(options);
+        
+        if (!initialResponse || !initialResponse.success || !initialResponse.data) {
+          throw new Error(initialResponse?.error || 'Failed to generate QR code');
+        }
+        
+        setLogs(prev => [...prev, '✅ QR code generated successfully!']);
+        const resultData = initialResponse.data;
+        setDoneFiles([{
+          originalFile: 'QR Code',
+          processedFile: resultData.filename,
+          download_url: resultData.download_url,
+          format: resultData.format,
+          size: resultData.size
+        }]);
+        setProgressPercent(100);
+        setLogs(prev => [...prev, '🎉 QR code ready for download!']);
+        return;
+      }
 
       for (let i = 0; i < tabFiles.length; i++) {
         const file = tabFiles[i];
@@ -96,7 +129,71 @@ function App() {
           case 'archive-extraction':
             if (i === 0) {
               initialResponse = await api.extractArchive(tabFiles, { extractPath: options.extractPath, overwriteExisting: options.overwriteExisting, password: options.password });
+            } else {
+              continue; // Skip remaining iterations for archive
             }
+            break;
+          case 'pdf-split':
+            initialResponse = await api.splitPDF(file, options);
+            console.log('[PDF SPLIT] Response:', initialResponse);
+            
+            // Handle multiple PDF files
+            if (initialResponse && initialResponse.success && initialResponse.data && initialResponse.data.files) {
+              setLogs(prev => [...prev, `✅ Split into ${initialResponse.data.totalFiles} PDF files`]);
+              
+              initialResponse.data.files.forEach((pdfFile, idx) => {
+                console.log(`[PDF SPLIT] Processing file ${idx + 1}:`, pdfFile);
+                
+                const doneItem = {
+                  originalFile: `${file.name} - Part ${idx + 1}`,
+                  processedFile: pdfFile.filename,
+                  download_url: pdfFile.download_url,
+                  pages: pdfFile.pages,
+                  size: pdfFile.size
+                };
+                setDoneFiles(prev => [...prev, doneItem]);
+                
+                // Add to local history
+                addToLocalHistory({
+                  operationType: 'pdf-split',
+                  originalFile: file.name,
+                  processedFile: pdfFile.filename,
+                  status: 'completed',
+                  size: pdfFile.size,
+                  pages: pdfFile.pages
+                });
+              });
+              
+              setProgressPercent(100);
+              setLogs(prev => [...prev, '🎉 All PDF files ready for download!']);
+              continue; // Skip the rest of the loop for this file
+            } else {
+              console.error('[PDF SPLIT] Invalid response:', initialResponse);
+              throw new Error('PDF split failed - invalid response from server');
+            }
+            break;
+          case 'pdf-merge':
+            if (i === 0) {
+              initialResponse = await api.mergePDFs(tabFiles);
+            } else {
+              continue; // Skip remaining iterations for merge
+            }
+            break;
+          case 'file-encrypt':
+            initialResponse = await api.encryptFile(file, options.password);
+            break;
+          case 'file-decrypt':
+            initialResponse = await api.decryptFile(file, options.password);
+            break;
+          case 'archive-create':
+            if (i === 0) {
+              initialResponse = await api.createArchive(tabFiles, options);
+            } else {
+              continue; // Skip remaining iterations for archive
+            }
+            break;
+          case 'qr-generate':
+            initialResponse = await api.generateQRCode(options);
             break;
           default:
             throw new Error(`Unknown operation type: ${operationType}`);
@@ -177,11 +274,74 @@ function App() {
             // Fallback if no jobId (should not happen with new backend)
             setLogs(prev => [...prev, `⚠️ Job started but no ID returned. Check History for results.`]);
           }
+        } else if (operationType === 'archive-extraction') {
+          // Archive extraction — synchronous, results come directly
+          const results = initialResponse.data?.results || [];
+          for (const r of results) {
+            if (r.success) {
+              setLogs(prev => [...prev, `✅ Extracted: ${r.original} — ${r.filesExtracted ?? '?'} files`]);
+              const doneItem = {
+                originalFile: r.original,
+                processedFile: r.filename,
+                filesExtracted: r.filesExtracted,
+                processingTime: r.processingTime,
+                download_url: r.download_url,
+              };
+              setDoneFiles(prev => [...prev, doneItem]);
+              
+              // Add to local history
+              addToLocalHistory({
+                operationType: 'archive-extraction',
+                originalFile: r.original,
+                processedFile: r.filename,
+                status: 'completed',
+                filesExtracted: r.filesExtracted,
+                processingTime: r.processingTime
+              });
+            } else {
+              setLogs(prev => [...prev, `❌ Failed: ${r.original} — ${r.error}`]);
+            }
+          }
+          break; // archive processes all files at once, skip the loop
+        } else if (operationType === 'pdf-merge' || operationType === 'file-encrypt' || operationType === 'file-decrypt' || operationType === 'archive-create' || operationType === 'qr-generate') {
+          // Synchronous operations with direct results
+          setLogs(prev => [...prev, `✅ Successfully processed: ${file?.name || operationType === 'qr-generate' ? 'QR Code' : 'Archive'}`]);
+          const resultData = initialResponse.data;
+          const doneItem = {
+            originalFile: file?.name || (operationType === 'qr-generate' ? 'QR Code' : 'Archive'),
+            processedFile: resultData.filename,
+            download_url: resultData.download_url,
+            totalFiles: resultData.totalFiles,
+            totalPages: resultData.totalPages,
+            filesCount: resultData.filesCount,
+            format: resultData.format,
+            size: resultData.size,
+            isPasswordProtected: resultData.isPasswordProtected,
+            compressionLevel: resultData.compressionLevel
+          };
+          setDoneFiles(prev => [...prev, doneItem]);
+          
+          // Add to local history
+          addToLocalHistory({
+            operationType: operationType,
+            originalFile: doneItem.originalFile,
+            processedFile: doneItem.processedFile,
+            status: 'completed',
+            size: doneItem.size,
+            totalFiles: doneItem.totalFiles,
+            totalPages: doneItem.totalPages,
+            filesCount: doneItem.filesCount,
+            format: doneItem.format,
+            isPasswordProtected: doneItem.isPasswordProtected,
+            compressionLevel: doneItem.compressionLevel
+          });
+          
+          if (operationType === 'pdf-merge' || operationType === 'qr-generate' || operationType === 'archive-create') break; // single operation
         } else {
-          // Synchronous/Other operations handling
+          // Synchronous/Other operations
           setLogs(prev => [...prev, `✅ Successfully processed: ${file.name}`]);
           if (initialResponse.data) {
-            // ... existing logic for others ...
+            // other generic handling
           }
         }
 
@@ -194,7 +354,9 @@ function App() {
       console.error('Processing error:', error);
       setLogs(prev => [...prev, `❌ Error: ${error.message}`]);
     } finally {
+      // Comprehensive state reset to ensure recovery from errors
       setIsProcessing(false);
+      setProgressPercent(100); // Always complete the progress bar
     }
   };
 
@@ -241,6 +403,7 @@ function App() {
     setProgressPercent(0);
     setLogs([]);
     setDoneFiles([]);
+    setIsProcessing(false); // Ensure processing flag is reset
   };
 
   const handleDownload = async (item) => {
@@ -267,7 +430,9 @@ function App() {
 
   // Check authentication status on component mount
   useEffect(() => {
-    checkAuthStatus();
+    // Skip authentication check - allow direct access
+    setIsLoading(false);
+    // checkAuthStatus();
   }, []);
 
   const renderActivePanel = () => {
@@ -330,6 +495,74 @@ function App() {
             onReset={handleReset}
           />
         );
+      case 'pdf-splitter':
+        return (
+          <PDFSplitterPanel
+            files={activeTab?.files || []}
+            setFiles={(f) => setTabFiles(activeTab.id, typeof f === 'function' ? f(activeTab.files) : f)}
+            isProcessing={isProcessing}
+            progressPercent={progressPercent}
+            logs={logs}
+            doneFiles={doneFiles}
+            onDownload={handleDownload}
+            onProcess={handleProcess}
+            onReset={handleReset}
+          />
+        );
+      case 'pdf-merger':
+        return (
+          <PDFMergerPanel
+            files={activeTab?.files || []}
+            setFiles={(f) => setTabFiles(activeTab.id, typeof f === 'function' ? f(activeTab.files) : f)}
+            isProcessing={isProcessing}
+            progressPercent={progressPercent}
+            logs={logs}
+            doneFiles={doneFiles}
+            onDownload={handleDownload}
+            onProcess={handleProcess}
+            onReset={handleReset}
+          />
+        );
+      case 'file-encryptor':
+        return (
+          <FileEncryptorPanel
+            files={activeTab?.files || []}
+            setFiles={(f) => setTabFiles(activeTab.id, typeof f === 'function' ? f(activeTab.files) : f)}
+            isProcessing={isProcessing}
+            progressPercent={progressPercent}
+            logs={logs}
+            doneFiles={doneFiles}
+            onDownload={handleDownload}
+            onProcess={handleProcess}
+            onReset={handleReset}
+          />
+        );
+      case 'qr-generator':
+        return (
+          <QRCodePanel
+            isProcessing={isProcessing}
+            progressPercent={progressPercent}
+            logs={logs}
+            doneFiles={doneFiles}
+            onDownload={handleDownload}
+            onProcess={handleProcess}
+            onReset={handleReset}
+          />
+        );
+      case 'archive-creation':
+        return (
+          <ArchiveCreationPanel
+            files={activeTab?.files || []}
+            setFiles={(f) => setTabFiles(activeTab.id, typeof f === 'function' ? f(activeTab.files) : f)}
+            isProcessing={isProcessing}
+            progressPercent={progressPercent}
+            logs={logs}
+            doneFiles={doneFiles}
+            onDownload={handleDownload}
+            onProcess={handleProcess}
+            onReset={handleReset}
+          />
+        );
       case 'history':
         return <HistoryPanel />;
       case 'settings':
@@ -365,31 +598,31 @@ function App() {
     );
   }
 
-  // Show auth modal if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <DarkModeContext.Provider value={{ darkMode, toggleDarkMode }}>
-        <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gradient-to-br from-slate-50 to-blue-50'} flex items-center justify-center`}>
-          <div className="text-center">
-            <h1 className={`text-4xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>FileForge</h1>
-            <p className={`mb-8 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Your all-in-one file processing solution</p>
-            <button
-              onClick={() => setShowAuthModal(true)}
-              className="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
-            >
-              Get Started
-            </button>
-          </div>
+  // Skip authentication - allow direct access
+  // if (!isAuthenticated) {
+  //   return (
+  //     <DarkModeContext.Provider value={{ darkMode, toggleDarkMode }}>
+  //       <div className={`min-h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gradient-to-br from-slate-50 to-blue-50'} flex items-center justify-center`}>
+  //         <div className="text-center">
+  //           <h1 className={`text-4xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>FileForge</h1>
+  //           <p className={`mb-8 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Your all-in-one file processing solution</p>
+  //           <button
+  //             onClick={() => setShowAuthModal(true)}
+  //             className="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+  //           >
+  //             Get Started
+  //           </button>
+  //         </div>
 
-          <AuthModal
-            isOpen={showAuthModal}
-            onClose={() => setShowAuthModal(false)}
-            onAuthSuccess={handleAuthSuccess}
-          />
-        </div>
-      </DarkModeContext.Provider>
-    );
-  }
+  //         <AuthModal
+  //           isOpen={showAuthModal}
+  //           onClose={() => setShowAuthModal(false)}
+  //           onAuthSuccess={handleAuthSuccess}
+  //         />
+  //       </div>
+  //     </DarkModeContext.Provider>
+  //   );
+  // }
 
   return (
     <DarkModeContext.Provider value={{ darkMode, toggleDarkMode }}>
@@ -440,7 +673,7 @@ function App() {
               setActivePanel(p);
             }} />
 
-          <main className="flex-1 overflow-auto">
+          <main className="flex-1 overflow-y-auto">
             <WorkspaceTabs />
             <div className="p-6">
               {renderActivePanel()}
