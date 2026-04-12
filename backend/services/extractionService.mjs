@@ -24,16 +24,12 @@ export async function extractText(inputPath, extractionMode = 'auto', includeMet
   const outputFilename = getUniqueFilename('processed', desiredFilename);
   const outputPath = path.join('processed', outputFilename);
 
-
-
   try {
     if (progressCallback) progressCallback(10, 'Analyzing file for text extraction...');
 
     // Determine the best extraction method
     const actualExtractionMode = extractionMode === 'auto' ?
       determineExtractionMode(inputExt) : extractionMode;
-
-
 
     let extractedText = '';
     let metadata = {};
@@ -44,20 +40,18 @@ export async function extractText(inputPath, extractionMode = 'auto', includeMet
         extractedText = await performOCR(inputPath, language, progressCallback);
         break;
       case 'native':
-        extractedText = await extractNativeText(inputPath, progressCallback);
+        extractedText = await extractNativeText(inputPath, includeMetadata, progressCallback);
         break;
       case 'hybrid':
-        extractedText = await performHybridExtraction(inputPath, language, progressCallback);
+        extractedText = await performHybridExtraction(inputPath, language, includeMetadata, progressCallback);
         break;
       default:
         throw new Error(`Unsupported extraction mode: ${actualExtractionMode}`);
     }
 
-
-
     if (progressCallback) progressCallback(80, 'Formatting extracted text...');
 
-    // Format output as text only
+    // Format output — only wrap with metadata section if user opted in
     const formattedOutput = formatAsText(extractedText, includeMetadata, metadata);
 
     // Write to file
@@ -67,8 +61,6 @@ export async function extractText(inputPath, extractionMode = 'auto', includeMet
     const outputStats = fs.statSync(outputPath);
 
     if (progressCallback) progressCallback(100, 'Text extraction completed');
-
-
 
     return {
       filename: outputFilename,
@@ -82,7 +74,6 @@ export async function extractText(inputPath, extractionMode = 'auto', includeMet
     };
 
   } catch (error) {
-
     // Clean up output file if it exists
     if (fs.existsSync(outputPath)) {
       fs.unlinkSync(outputPath);
@@ -123,7 +114,7 @@ async function performOCR(inputPath, language, progressCallback) {
         // Set parameters with error handling
         try {
           await worker.setParameters({
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:()[]{}\'"`~@#$%^&*+=|\\/<>-_',
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:()[]{}\'"`~@#$%^&*+=|\\/\<\>-_',
             preserve_interword_spaces: '1',
             user_defined_dpi: '300',
             tessedit_ocr_engine_mode: '3',
@@ -182,12 +173,13 @@ async function performOCR(inputPath, language, progressCallback) {
   }
 }
 
-async function extractNativeText(inputPath, progressCallback) {
+async function extractNativeText(inputPath, includeMetadata = false, progressCallback) {
   if (progressCallback) progressCallback(20, 'Extracting native text...');
 
   const inputExt = path.extname(inputPath).toLowerCase();
 
   switch (inputExt) {
+    // Plain text / code files — read as-is
     case '.txt':
     case '.md':
     case '.markdown':
@@ -196,24 +188,60 @@ async function extractNativeText(inputPath, progressCallback) {
     case '.csv':
     case '.json':
     case '.xml':
+    case '.yaml':
+    case '.yml':
+    case '.ini':
+    case '.cfg':
+    case '.conf':
+    case '.env':
+    case '.js':
+    case '.jsx':
+    case '.ts':
+    case '.tsx':
+    case '.py':
+    case '.java':
+    case '.cpp':
+    case '.c':
+    case '.cs':
+    case '.go':
+    case '.rb':
+    case '.php':
+    case '.swift':
+    case '.kt':
+    case '.rs':
+    case '.sql':
+    case '.sh':
+    case '.bat':
+    case '.ps1':
+      return fs.readFileSync(inputPath, 'utf8');
+
+    // HTML / HTM — strip tags
     case '.html':
     case '.htm':
-      return fs.readFileSync(inputPath, 'utf8');
+      return stripHtmlTags(fs.readFileSync(inputPath, 'utf8'));
+
     case '.pdf':
-      return await extractTextFromPdf(inputPath, progressCallback);
+      return await extractTextFromPdf(inputPath, includeMetadata, progressCallback);
     case '.docx':
-      return await extractTextFromDocx(inputPath, progressCallback);
+      return await extractTextFromDocx(inputPath, includeMetadata, progressCallback);
     case '.doc':
       return await extractTextFromDoc(inputPath, progressCallback);
     case '.xlsx':
     case '.xls':
-      return await extractTextFromExcel(inputPath, progressCallback);
+      return await extractTextFromExcel(inputPath, includeMetadata, progressCallback);
+    case '.pptx':
+      return await extractTextFromPptx(inputPath, includeMetadata, progressCallback);
+    case '.odt':
+      return await extractTextFromOdt(inputPath, progressCallback);
+    case '.eml':
+      return await extractTextFromEml(inputPath, progressCallback);
+
     default:
       throw new Error(`Native text extraction not supported for: ${inputExt}`);
   }
 }
 
-async function performHybridExtraction(inputPath, language, progressCallback) {
+async function performHybridExtraction(inputPath, language, includeMetadata = false, progressCallback) {
   if (progressCallback) progressCallback(20, 'Starting hybrid extraction...');
 
   let nativeText = '';
@@ -223,11 +251,10 @@ async function performHybridExtraction(inputPath, language, progressCallback) {
   try {
     // Try native extraction first
     if (progressCallback) progressCallback(25, 'Attempting native text extraction...');
-    nativeText = await extractNativeText(inputPath, (progress, message) => {
+    nativeText = await extractNativeText(inputPath, includeMetadata, (progress, message) => {
       if (progressCallback) progressCallback(25 + (progress * 0.25), `Native: ${message}`);
     });
   } catch (error) {
-
     extractionErrors.push(`Native extraction failed: ${error.message}`);
   }
 
@@ -239,7 +266,6 @@ async function performHybridExtraction(inputPath, language, progressCallback) {
         if (progressCallback) progressCallback(50 + (progress * 0.4), `OCR: ${message}`);
       });
     } catch (error) {
-
       extractionErrors.push(`OCR extraction failed: ${error.message}`);
     }
   }
@@ -261,19 +287,7 @@ async function performHybridExtraction(inputPath, language, progressCallback) {
     const inputExt = path.extname(inputPath).toLowerCase();
     const fileName = path.basename(inputPath);
 
-    combinedText = `Text extraction failed for: ${fileName}
-
-=== EXTRACTION ERRORS ===
-${extractionErrors.join('\n')}
-
-=== RECOMMENDATIONS ===
-- For PDF files: Ensure the PDF contains selectable text (not just scanned images)
-- For image files: Try adjusting OCR language settings
-- For document files: Ensure the file is not corrupted or password-protected
-- Consider using a different extraction mode or preprocessing the file
-
-File type: ${inputExt}
-File path: ${inputPath}`;
+    combinedText = `Text extraction failed for: ${fileName}\n\nRecommendations:\n- For PDF files: Ensure the PDF contains selectable text (not just scanned images)\n- For image files: Try adjusting OCR language settings\n- For document files: Ensure the file is not corrupted or password-protected\n\nFile type: ${inputExt}`;
   }
 
   return combinedText;
@@ -303,87 +317,49 @@ async function preprocessImageForOCR(inputPath) {
   }
 }
 
-async function extractTextFromPdf(inputPath, progressCallback) {
+// ─── Per-format extractors ────────────────────────────────────────────────────
+
+async function extractTextFromPdf(inputPath, includeMetadata = false, progressCallback) {
   if (progressCallback) progressCallback(40, 'Extracting text from PDF...');
 
   try {
-    // Read the PDF file
     const dataBuffer = fs.readFileSync(inputPath);
-
-    // Parse the PDF
     const data = await pdfParse(dataBuffer);
-
-    // Extract text content
     let extractedText = data.text;
 
-    // Add metadata if available
-    if (data.info) {
-      const metadata = {
-        title: data.info.Title || 'Unknown',
-        author: data.info.Author || 'Unknown',
-        subject: data.info.Subject || 'Unknown',
-        creator: data.info.Creator || 'Unknown',
-        producer: data.info.Producer || 'Unknown',
-        creationDate: data.info.CreationDate || 'Unknown',
-        modificationDate: data.info.ModDate || 'Unknown',
-        pageCount: data.numpages || 0,
-        textLength: extractedText.length
-      };
-
-
-      // Add metadata to the extracted text
-      extractedText = `=== PDF METADATA ===
-Title: ${metadata.title}
-Author: ${metadata.author}
-Subject: ${metadata.subject}
-Creator: ${metadata.creator}
-Producer: ${metadata.producer}
-Creation Date: ${metadata.creationDate}
-Modification Date: ${metadata.modificationDate}
-Page Count: ${metadata.pageCount}
-Text Length: ${metadata.textLength}
-
-=== EXTRACTED TEXT ===
-
-${extractedText}`;
+    if (includeMetadata && data.info) {
+      const meta = data.info;
+      const metaBlock = [
+        `Title: ${meta.Title || 'Unknown'}`,
+        `Author: ${meta.Author || 'Unknown'}`,
+        `Subject: ${meta.Subject || 'Unknown'}`,
+        `Creator: ${meta.Creator || 'Unknown'}`,
+        `Producer: ${meta.Producer || 'Unknown'}`,
+        `Pages: ${data.numpages || 0}`,
+        `Characters: ${extractedText.length}`,
+      ].join('\n');
+      extractedText = `=== PDF Info ===\n${metaBlock}\n\n=== Content ===\n\n${extractedText}`;
     }
 
-    console.log(`[EXTRACTION DEBUG] Final extracted text length: ${extractedText.length}`);
     return extractedText;
   } catch (error) {
-    console.error(`[EXTRACTION DEBUG] PDF extraction error:`, error);
+    console.error('[EXTRACTION] PDF extraction error:', error);
     throw new Error(`Failed to extract text from PDF: ${error.message}`);
   }
 }
 
-async function extractTextFromDocx(inputPath, progressCallback) {
+async function extractTextFromDocx(inputPath, includeMetadata = false, progressCallback) {
   if (progressCallback) progressCallback(40, 'Extracting text from DOCX...');
 
   try {
-    // Read the DOCX file
     const dataBuffer = fs.readFileSync(inputPath);
-
-    // Extract text using mammoth
     const result = await mammoth.extractRawText({ buffer: dataBuffer });
-
     let extractedText = result.value;
 
-    // Add metadata
-    const metadata = {
-      textLength: extractedText.length,
-      wordCount: extractedText.split(/\s+/).length,
-      hasMessages: result.messages && result.messages.length > 0
-    };
-
-    // Add metadata to the extracted text
-    extractedText = `=== DOCX METADATA ===
-Text Length: ${metadata.textLength}
-Word Count: ${metadata.wordCount}
-Has Processing Messages: ${metadata.hasMessages}
-
-=== EXTRACTED TEXT ===
-
-${extractedText}`;
+    if (includeMetadata) {
+      const wordCount = extractedText.split(/\s+/).filter(Boolean).length;
+      extractedText = `=== DOCX Info ===\nWord Count: ${wordCount}\nCharacters: ${extractedText.length}\n\n=== Content ===\n\n${extractedText}`;
+    }
 
     return extractedText;
   } catch (error) {
@@ -394,34 +370,32 @@ ${extractedText}`;
 
 async function extractTextFromDoc(inputPath, progressCallback) {
   if (progressCallback) progressCallback(40, 'Extracting text from DOC...');
-
+  // .doc (legacy Word) needs LibreOffice or antiword — attempt raw binary scan for printable ASCII
   try {
-    // For .doc files, we'll need to use a different approach
-    // Since mammoth doesn't support .doc files directly, we'll try to convert or use OCR
-    // For now, we'll attempt to read as binary and provide a helpful message
-
-    const stats = fs.statSync(inputPath);
-    const fileSize = stats.size;
-
-    // Create a helpful message about .doc files
-    const message = `Text extracted from DOC: ${path.basename(inputPath)}
-
-Note: .doc files (older Word format) require special handling.
-File size: ${fileSize} bytes
-
-This file format is not directly supported for text extraction.
-Consider converting it to .docx format first for better text extraction results.
-
-Alternatively, you can use OCR mode to extract text from this document by treating it as an image.`;
-
-    return message;
+    const buf = fs.readFileSync(inputPath);
+    // Extract printable ASCII runs (crude but useful fallback)
+    let text = '';
+    let run = '';
+    for (let i = 0; i < buf.length; i++) {
+      const c = buf[i];
+      if (c >= 32 && c < 127) {
+        run += String.fromCharCode(c);
+      } else {
+        if (run.length > 4) text += run + '\n';
+        run = '';
+      }
+    }
+    if (run.length > 4) text += run;
+    if (!text.trim()) {
+      return 'Could not extract text from this .doc file. Please convert it to .docx format first for reliable extraction.';
+    }
+    return text;
   } catch (error) {
-    console.error('DOC extraction error:', error);
     throw new Error(`Failed to extract text from DOC: ${error.message}`);
   }
 }
 
-async function extractTextFromExcel(inputPath, progressCallback) {
+async function extractTextFromExcel(inputPath, includeMetadata = false, progressCallback) {
   if (progressCallback) progressCallback(40, 'Extracting text from Excel file...');
 
   try {
@@ -429,119 +403,192 @@ async function extractTextFromExcel(inputPath, progressCallback) {
     await workbook.xlsx.readFile(inputPath);
 
     let extractedText = '';
-    const metadata = {
-      sheetCount: workbook.worksheets.length,
-      totalRows: 0,
-      totalCells: 0
-    };
+    let totalRows = 0;
+    let totalCells = 0;
 
-    // Process each worksheet
     for (const worksheet of workbook.worksheets) {
       if (progressCallback) progressCallback(45, `Processing worksheet: ${worksheet.name}`);
-
-      extractedText += `\n=== WORKSHEET: ${worksheet.name} ===\n\n`;
+      extractedText += `\n[Sheet: ${worksheet.name}]\n`;
 
       let rowCount = 0;
       let cellCount = 0;
 
-      // Process each row
-      worksheet.eachRow((row, rowNumber) => {
+      worksheet.eachRow((row) => {
         rowCount++;
         const rowData = [];
-
-        // Process each cell in the row
-        row.eachCell((cell, colNumber) => {
+        row.eachCell((cell) => {
           cellCount++;
           const cellValue = cell.value;
-
           if (cellValue !== null && cellValue !== undefined) {
-            // Convert different cell types to string
             let textValue = '';
             if (typeof cellValue === 'object' && cellValue.richText) {
-              // Handle rich text
               textValue = cellValue.richText.map(rt => rt.text).join('');
             } else if (typeof cellValue === 'object' && cellValue.text) {
-              // Handle hyperlinks
               textValue = cellValue.text;
             } else {
-              // Handle regular values
               textValue = String(cellValue);
             }
-
-            if (textValue.trim()) {
-              rowData.push(textValue.trim());
-            }
+            if (textValue.trim()) rowData.push(textValue.trim());
           }
         });
-
-        // Add row data if it contains any text
-        if (rowData.length > 0) {
-          extractedText += rowData.join('\t') + '\n';
-        }
+        if (rowData.length > 0) extractedText += rowData.join('\t') + '\n';
       });
 
-      metadata.totalRows += rowCount;
-      metadata.totalCells += cellCount;
-
-      extractedText += `\nRows: ${rowCount}, Cells: ${cellCount}\n\n`;
+      totalRows += rowCount;
+      totalCells += cellCount;
     }
 
-    // Add metadata to the extracted text
-    extractedText = `=== EXCEL METADATA ===
-Total Worksheets: ${metadata.sheetCount}
-Total Rows: ${metadata.totalRows}
-Total Cells: ${metadata.totalCells}
+    if (includeMetadata) {
+      const header = `=== Excel Info ===\nSheets: ${workbook.worksheets.length}\nTotal Rows: ${totalRows}\nTotal Cells: ${totalCells}\n\n=== Content ===\n`;
+      extractedText = header + extractedText;
+    }
 
-=== EXTRACTED TEXT ===
-${extractedText}`;
-
-    return extractedText;
+    return extractedText.trim();
   } catch (error) {
     console.error('Excel extraction error:', error);
     throw new Error(`Failed to extract text from Excel file: ${error.message}`);
   }
 }
 
-async function formatOutput(extractedText, outputFormat, includeMetadata, metadata) {
-  // Only support text format for now
-  return formatAsText(extractedText, includeMetadata, metadata);
+async function extractTextFromPptx(inputPath, includeMetadata = false, progressCallback) {
+  if (progressCallback) progressCallback(40, 'Extracting text from PPTX...');
+  try {
+    // PPTX is a ZIP — read ppt/slides/slide*.xml files
+    const unzipper = await import('unzipper');
+    const directory = await unzipper.Open.file(inputPath);
+    const slideFiles = directory.files.filter(f => /ppt\/slides\/slide\d+\.xml$/.test(f.path)).sort((a, b) => a.path.localeCompare(b.path));
+
+    let allText = '';
+    let slideNum = 0;
+
+    for (const entry of slideFiles) {
+      slideNum++;
+      const content = await entry.buffer();
+      const xml = content.toString('utf8');
+      // Extract <a:t> text runs
+      const textRuns = [];
+      const regex = /<a:t[^>]*>([^<]*)<\/a:t>/g;
+      let m;
+      while ((m = regex.exec(xml)) !== null) {
+        const t = m[1].trim();
+        if (t) textRuns.push(t);
+      }
+      if (textRuns.length > 0) {
+        allText += `[Slide ${slideNum}]\n${textRuns.join(' ')}\n\n`;
+      }
+    }
+
+    if (!allText.trim()) return 'No text content found in this PPTX file.';
+
+    if (includeMetadata) {
+      allText = `=== PPTX Info ===\nSlides: ${slideNum}\n\n=== Content ===\n\n${allText}`;
+    }
+
+    return allText.trim();
+  } catch (error) {
+    console.error('PPTX extraction error:', error);
+    throw new Error(`Failed to extract text from PPTX: ${error.message}`);
+  }
 }
+
+async function extractTextFromOdt(inputPath, progressCallback) {
+  if (progressCallback) progressCallback(40, 'Extracting text from ODT...');
+  try {
+    const unzipper = await import('unzipper');
+    const directory = await unzipper.Open.file(inputPath);
+    const contentFile = directory.files.find(f => f.path === 'content.xml');
+    if (!contentFile) throw new Error('content.xml not found in ODT file');
+    const buf = await contentFile.buffer();
+    const xml = buf.toString('utf8');
+    // Strip XML tags, decode entities
+    const text = xml
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
+    return text || 'No text content found in this ODT file.';
+  } catch (error) {
+    console.error('ODT extraction error:', error);
+    throw new Error(`Failed to extract text from ODT: ${error.message}`);
+  }
+}
+
+async function extractTextFromEml(inputPath, progressCallback) {
+  if (progressCallback) progressCallback(40, 'Extracting text from EML...');
+  try {
+    const raw = fs.readFileSync(inputPath, 'utf8');
+    // Split headers from body
+    const sep = raw.indexOf('\n\n');
+    const headers = sep > -1 ? raw.substring(0, sep) : raw;
+    const body = sep > -1 ? raw.substring(sep + 2) : '';
+    // Parse key headers
+    const getHeader = (name) => {
+      const rx = new RegExp(`^${name}:\\s*(.+)`, 'im');
+      const m = headers.match(rx);
+      return m ? m[1].trim() : '';
+    };
+    const from = getHeader('From');
+    const to = getHeader('To');
+    const subject = getHeader('Subject');
+    const date = getHeader('Date');
+    // Decode quoted-printable body
+    const decodedBody = body
+      .replace(/=\r?\n/g, '')             // soft line breaks
+      .replace(/=[0-9A-Fa-f]{2}/g, (m) => String.fromCharCode(parseInt(m.slice(1), 16)));
+    return `From: ${from}\nTo: ${to}\nSubject: ${subject}\nDate: ${date}\n\n${decodedBody}`.trim();
+  } catch (error) {
+    throw new Error(`Failed to extract text from EML: ${error.message}`);
+  }
+}
+
+function stripHtmlTags(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')  // remove script blocks
+    .replace(/<style[\s\S]*?<\/style>/gi, '')     // remove style blocks
+    .replace(/<[^>]+>/g, ' ')                      // strip tags
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#\d+;/g, (m) => String.fromCharCode(parseInt(m.slice(2, -1))))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// ─── Format helpers ───────────────────────────────────────────────────────────
 
 function formatAsText(extractedText, includeMetadata, metadata) {
-  let output = extractedText;
-
-  if (includeMetadata && metadata) {
-    output = `=== EXTRACTION METADATA ===
-${JSON.stringify(metadata, null, 2)}
-
-=== EXTRACTED TEXT ===
-${output}`;
+  if (includeMetadata && metadata && Object.keys(metadata).length > 0) {
+    return `=== Extraction Metadata ===\n${JSON.stringify(metadata, null, 2)}\n\n=== Extracted Text ===\n${extractedText}`;
   }
-
-  return output;
+  return extractedText;
 }
 
+// ─── Mode determination ───────────────────────────────────────────────────────
+
 function determineExtractionMode(fileExtension) {
-  console.log(`[EXTRACTION DEBUG] Determining extraction mode for extension: ${fileExtension}`);
-
   const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp', '.svg'];
-  const textExts = ['.txt', '.md', '.markdown', '.rtf', '.log', '.csv', '.json', '.xml', '.html', '.htm'];
-  const documentExts = ['.pdf', '.docx', '.doc'];
+  const textExts = [
+    '.txt', '.md', '.markdown', '.log', '.csv', '.json', '.xml', '.yaml', '.yml',
+    '.html', '.htm', '.ini', '.cfg', '.conf', '.env', '.rtf',
+    // Code files
+    '.js', '.jsx', '.ts', '.tsx', '.py', '.java', '.cpp', '.c', '.cs',
+    '.go', '.rb', '.php', '.swift', '.kt', '.rs', '.sql', '.sh', '.bat', '.ps1',
+  ];
+  const documentExts = ['.pdf', '.docx', '.doc', '.pptx', '.odt'];
   const spreadsheetExts = ['.xlsx', '.xls', '.ods'];
+  const emailExts = ['.eml'];
 
-  let mode;
-  if (imageExts.includes(fileExtension)) {
-    mode = 'ocr';
-  } else if (textExts.includes(fileExtension)) {
-    mode = 'native';
-  } else if (documentExts.includes(fileExtension)) {
-    mode = 'hybrid';
-  } else if (spreadsheetExts.includes(fileExtension)) {
-    mode = 'native'; // Spreadsheets can be read as text
-  } else {
-    mode = 'ocr'; // Default to OCR for unknown file types
-  }
+  if (imageExts.includes(fileExtension)) return 'ocr';
+  if (textExts.includes(fileExtension)) return 'native';
+  if (documentExts.includes(fileExtension)) return 'hybrid';
+  if (spreadsheetExts.includes(fileExtension)) return 'native';
+  if (emailExts.includes(fileExtension)) return 'native';
 
-  console.log(`[EXTRACTION DEBUG] Determined mode: ${mode} for extension: ${fileExtension}`);
-  return mode;
+  return 'ocr'; // Default to OCR for unknown file types
 }

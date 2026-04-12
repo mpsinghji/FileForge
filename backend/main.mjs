@@ -64,7 +64,7 @@ function createWindow() {
   mainWindow.loadURL(frontendUrl);
 
   if (process.env.NODE_ENV === "development" || process.argv.includes("--dev")) {
-    mainWindow.webContents.openDevTools();
+    // mainWindow.webContents.openDevTools();
   }
 
   mainWindow.on("closed", () => {

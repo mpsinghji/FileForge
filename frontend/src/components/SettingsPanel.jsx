@@ -7,7 +7,7 @@ import { useAuth } from '../store/useAuth';
 function SettingsPanel() {
     const { darkMode, toggleDarkMode } = useDarkMode();
     const { language, setLanguage, t } = useLanguage();
-    const { logout } = useAuth();
+    const { logout, isAuthenticated } = useAuth();
     const [settings, setSettings] = useState({
         autoSave: true,
         notifications: true,
@@ -154,7 +154,8 @@ function SettingsPanel() {
                 </div>
             </div>
 
-            {/* User Profile Section */}
+            {/* User Profile Section - Only show when logged in */}
+            {isAuthenticated && (
             <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
                 <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>User Profile</h2>
                 <form onSubmit={handleSaveProfile} className="space-y-4">
@@ -238,6 +239,7 @@ function SettingsPanel() {
                     </div>
                 </form>
             </div>
+            )}
 
             <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
                 <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>{t('settings.general')}</h2>
@@ -257,6 +259,27 @@ function SettingsPanel() {
                                 <option key={lang.value} value={lang.value}>{lang.label}</option>
                             ))}
                         </select>
+                    </div>
+                </div>
+            </div>
+
+            {/* Privacy Policy Section */}
+            <div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                <h2 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-800'} mb-4`}>Privacy & Legal</h2>
+                <div className="space-y-3">
+                    <a
+                        href="/privacy-policy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`w-full py-3 px-6 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${darkMode ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    >
+                        <span>🔒</span>
+                        <span>Privacy Policy</span>
+                    </a>
+                    <div className={`p-4 rounded-lg ${darkMode ? 'bg-blue-900/20 border border-blue-500/30' : 'bg-blue-50 border border-blue-200'}`}>
+                        <p className={`text-sm ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>
+                            <strong>Your Privacy Matters:</strong> All files are automatically deleted after 7 days. We never sell your data. Authentication is optional.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -282,6 +305,7 @@ function SettingsPanel() {
                         sessionTimeout: 30,
                     })}>{t('settings.reset')}</button>
                     <button className={`w-full py-3 px-6 bg-red-100 text-red-700 rounded-xl font-medium hover:bg-red-200 transition-colors ${darkMode ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`} onClick={() => { localStorage.clear(); window.location.reload(); }}>{t('settings.clearData')}</button>
+                    {isAuthenticated && (
                     <button
                         className={`w-full py-3 px-6 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-colors`}
                         onClick={async () => {
@@ -296,6 +320,7 @@ function SettingsPanel() {
                     >
                         Logout
                     </button>
+                    )}
                 </div>
             </div>
         </div>

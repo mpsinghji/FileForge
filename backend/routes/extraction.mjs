@@ -3,12 +3,40 @@ import { uploadMultiple, handleUploadError } from '../middleware/upload.mjs';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
 import { authenticateToken } from '../middleware/auth.mjs';
 import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById, getFileHistory, getProcessingJob } from '../services/databaseService.js';
+import { guestAddFileHistory, guestUpdateFileHistory, guestGetFileHistory, guestAddJob, guestUpdateJob, guestGetJob } from '../services/guestJobStore.mjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import { extractArchive, checkArchiveEncryption } from '../services/archiveExtractionService.mjs';
 
 const router = express.Router();
+
+// — Auth helpers —
+function isAuthenticated(req) { return !!(req.user && req.user.userId); }
+async function saveFileHistory(req, data) {
+  if (isAuthenticated(req)) { try { return await addFileHistory({ ...data, user_id: req.user.userId, is_guest: false }); } catch(e){ console.warn('[DB]',e.message); } }
+  return guestAddFileHistory({ ...data, user_id: null, is_guest: true });
+}
+async function saveProcessingJob(req, jobId, fileHistoryId, opType) {
+  if (isAuthenticated(req)) { try { await addProcessingJob({ job_id: jobId, file_history_id: fileHistoryId, operation_type: opType }); return; } catch(e){ console.warn('[DB]',e.message); } }
+  guestAddJob(jobId, fileHistoryId, opType);
+}
+async function resolveJob(jobId) {
+  try { const j = await getProcessingJob(jobId); if(j) return {source:'db',job:j}; } catch(_){}
+  const j = guestGetJob(jobId); if(j) return {source:'guest',job:j}; return null;
+}
+async function resolveHistory(id) {
+  try { const r = await getFileHistoryById(id); if(r) return r; } catch(_){}
+  return guestGetFileHistory(id);
+}
+async function doUpdateJob(jobId, data) {
+  try { await updateProcessingJob(jobId, data); } catch(_){}
+  guestUpdateJob(jobId, data);
+}
+async function doUpdateHistory(histId, data) {
+  try { await updateFileHistory(histId, data); } catch(_){}
+  guestUpdateFileHistory(histId, data);
+}
 
 // ─── Password-check endpoint ─────────────────────────────────────────────────
 // POST /api/extraction/archive/check
@@ -35,65 +63,33 @@ router.post('/archive/check',
 
 
 // Text extraction endpoint
-router.post('/extract', authenticateToken, uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
+router.post('/extract', uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
   if (!req.files || req.files.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error: 'No files uploaded for text extraction'
-    });
+    return res.status(400).json({ success: false, error: 'No files uploaded for text extraction' });
   }
 
   const { mode, includeMetadata, language } = req.body;
-  const extractionMode = (mode || 'auto');
-  const withMetadata = String(includeMetadata) === 'true' || includeMetadata === true;
-
-  // Validate extraction mode
   const validModes = ['auto', 'ocr', 'native', 'hybrid'];
-  if (!validModes.includes(extractionMode)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid extraction mode. Must be one of: auto, ocr, native, hybrid'
-    });
-  }
+  const extractionMode = validModes.includes(String(mode)) ? String(mode) : 'auto';
+  const withMetadata = String(includeMetadata) === 'true' || includeMetadata === true;
 
   const jobId = uuidv4();
   const extractionJobs = [];
 
-  // Process each file
   for (const file of req.files) {
-    const fileHistoryId = await addFileHistory({
+    const fileHistoryId = await saveFileHistory(req, {
       original_filename: file.originalname,
       original_path: file.path,
       operation_type: 'extraction',
-      operation_details: {
-        extractionMode,
-        outputFormat: 'txt',
-        includeMetadata: withMetadata,
-        language: language || 'auto',
-        mimetype: file.mimetype,
-        size: file.size
-      },
+      operation_details: { extractionMode, outputFormat: 'txt', includeMetadata: withMetadata, language: language || 'auto', mimetype: file.mimetype, size: file.size },
       file_size: file.size,
-      user_id: req.user.userId
     });
-
-    await addProcessingJob({
-      job_id: `${jobId}-${fileHistoryId}`,
-      file_history_id: fileHistoryId,
-      operation_type: 'extraction'
-    });
-
-    extractionJobs.push({
-      jobId: `${jobId}-${fileHistoryId}`,
-      fileHistoryId,
-      originalFile: file.originalname,
-      extractionMode,
-      outputFormat: 'txt'
-    });
+    const jobId2 = `${jobId}-${fileHistoryId}`;
+    await saveProcessingJob(req, jobId2, fileHistoryId, 'extraction');
+    extractionJobs.push({ jobId: jobId2, fileHistoryId, originalFile: file.originalname, extractionMode, outputFormat: 'txt' });
   }
 
-  // Start extraction process in background
-  processExtraction(jobId, extractionJobs, extractionMode, withMetadata, language || 'auto');
+  processExtraction(jobId, extractionJobs, extractionMode, withMetadata, language || 'auto', req);
 
   res.status(200).json({
     success: true,
@@ -103,32 +99,24 @@ router.post('/extract', authenticateToken, uploadMultiple, handleUploadError, as
       totalFiles: extractionJobs.length,
       extractionMode,
       outputFormat: 'txt',
-      includeMetadata,
-      language,
-      jobs: extractionJobs.map(job => ({
-        jobId: job.jobId,
-        originalFile: job.originalFile,
-        extractionMode: job.extractionMode,
-        outputFormat: job.outputFormat
-      }))
+      includeMetadata: withMetadata,
+      language: language || 'auto',
+      jobs: extractionJobs.map(job => ({ jobId: job.jobId, originalFile: job.originalFile, extractionMode: job.extractionMode, outputFormat: job.outputFormat }))
     }
   });
 }));
 
 // Get extraction status
-router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) => {
+router.get('/status/:jobId', asyncHandler(async (req, res) => {
   const { jobId } = req.params;
-  const job = await getProcessingJob(jobId);
+  const found = await resolveJob(jobId);
 
-  if (!job) {
-    return res.status(404).json({
-      success: false,
-      error: 'Job not found'
-    });
+  if (!found) {
+    return res.status(404).json({ success: false, error: 'Job not found' });
   }
 
-  const fileHistory = await getFileHistoryById(job.file_history_id);
-  const metadata = await getFileMetadata(job.file_history_id);
+  const { job } = found;
+  const fileHistory = await resolveHistory(job.file_history_id);
 
   res.status(200).json({
     success: true,
@@ -136,17 +124,16 @@ router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) =>
       jobId: job.job_id,
       status: job.status,
       progress: job.progress,
-      logs: job.logs ? JSON.parse(job.logs) : [],
-      originalFile: fileHistory.original_filename,
-      extractedFile: fileHistory.processed_filename,
-      downloadUrl: fileHistory.download_url || (fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null),
-      metadata: includeMetadata ? metadata : null
+      logs: job.logs ? (typeof job.logs === 'string' ? JSON.parse(job.logs) : job.logs) : [],
+      originalFile: fileHistory?.original_filename,
+      extractedFile: fileHistory?.processed_filename,
+      downloadUrl: fileHistory?.download_url || null
     }
   });
 }));
 
 // Get extraction modes info
-router.get('/modes', authenticateToken, asyncHandler(async (req, res) => {
+router.get('/modes', asyncHandler(async (req, res) => {
   const extractionModes = [
     {
       value: 'auto',
@@ -185,7 +172,7 @@ router.get('/modes', authenticateToken, asyncHandler(async (req, res) => {
 }));
 
 // Get supported languages
-router.get('/languages', authenticateToken, asyncHandler(async (req, res) => {
+router.get('/languages', asyncHandler(async (req, res) => {
   const languages = [
     { value: 'auto', label: 'Auto Detect', description: 'Automatically detect language' },
     { value: 'en', label: 'English', description: 'English text recognition' },
@@ -207,9 +194,9 @@ router.get('/languages', authenticateToken, asyncHandler(async (req, res) => {
 }));
 
 // Get extraction history
-router.get('/history', authenticateToken, asyncHandler(async (req, res) => {
+router.get('/history', asyncHandler(async (req, res) => {
   const { limit = 20, offset = 0 } = req.query;
-  const history = await getFileHistory(parseInt(limit), parseInt(offset), 'extraction', req.user.userId);
+  const history = await getFileHistory(parseInt(limit), parseInt(offset), 'extraction', null);
 
   res.status(200).json({
     success: true,
@@ -223,8 +210,8 @@ router.get('/history', authenticateToken, asyncHandler(async (req, res) => {
 }));
 
 // Get extraction statistics
-router.get('/stats', authenticateToken, asyncHandler(async (req, res) => {
-  const history = await getFileHistory(1000, 0, 'extraction', req.user.userId);
+router.get('/stats', asyncHandler(async (req, res) => {
+  const history = await getFileHistory(1000, 0, 'extraction', null);
 
   const completedExtractions = history.filter(item => item.status === 'completed');
 
@@ -290,14 +277,14 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
   for (const job of extractionJobs) {
     try {
       // Update job status to processing
-      await updateProcessingJob(job.jobId, {
+      await doUpdateJob(job.jobId, {
         status: 'processing',
         progress: 0,
         logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Starting text extraction...' }])
       });
 
       // Get file history
-      const fileHistory = await getFileHistoryById(job.fileHistoryId);
+      const fileHistory = await resolveHistory(job.fileHistoryId);
 
       // Extract text
       const result = await extractText(
@@ -307,7 +294,7 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
         language,
         fileHistory.original_filename,
         (progress, log) => {
-          updateProcessingJob(job.jobId, {
+          doUpdateJob(job.jobId, {
             status: 'processing',
             progress,
             logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: log }])
@@ -319,7 +306,7 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
       const supabaseResult = await uploadToSupabase(result.path, `extracted/${path.basename(result.path)}`);
 
       // Update file history with results
-      await updateFileHistory(job.fileHistoryId, {
+      await doUpdateHistory(job.fileHistoryId, {
         processed_filename: result.filename,
         processed_path: result.path,
         download_url: supabaseResult.publicUrl,
@@ -339,7 +326,7 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
       }
 
       // Update job status to completed
-      await updateProcessingJob(job.jobId, {
+      await doUpdateJob(job.jobId, {
         status: 'completed',
         progress: 100,
         logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Text extraction completed successfully' }])
@@ -353,14 +340,14 @@ async function processExtraction(mainJobId, extractionJobs, extractionMode, incl
       console.error(`Extraction failed for job ${job.jobId}:`, error);
 
       // Update job status to failed
-      await updateProcessingJob(job.jobId, {
+      await doUpdateJob(job.jobId, {
         status: 'failed',
         progress: 0,
         logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: `Extraction failed: ${error.message}` }])
       });
 
       // Update file history with error
-      await updateFileHistory(job.fileHistoryId, {
+      await doUpdateHistory(job.fileHistoryId, {
         status: 'failed',
         error_message: error.message
       });
@@ -426,6 +413,12 @@ router.post('/archive',
           }
         );
 
+        // ── Build a flat file listing from the extraction output dir ──
+        let fileList = [];
+        if (r.path && fs.existsSync(r.path)) {
+          fileList = listExtractedFiles(r.path);
+        }
+
         // Bundle the extracted folder into a single ZIP for clean one-click download
         let download_url = null;
         let bundleFilename = null;
@@ -467,6 +460,7 @@ router.post('/archive',
           processingTime: r.processingTime,
           download_url,
           filename: bundleFilename || r.filename,
+          fileList,
         });
       } catch (error) {
         console.error('[ARCHIVE ROUTE] Error for', file.originalname, ':', error.message);
@@ -491,5 +485,27 @@ router.post('/archive',
     }
     res.status(200).json({ success: true, data: { results } });
   }));
+
+// ─── Helper: recursively list all files in an extracted dir ──────────────────
+function listExtractedFiles(rootDir) {
+  const items = [];
+  const walk = (dir, base) => {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      const relPath = base ? `${base}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        walk(fullPath, relPath);
+      } else {
+        let size = 0;
+        try { size = fs.statSync(fullPath).size; } catch { }
+        items.push({ name: entry.name, relativePath: relPath, size });
+      }
+    }
+  };
+  walk(rootDir, '');
+  return items;
+}
 
 export default router;

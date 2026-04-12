@@ -2,7 +2,7 @@ import express from 'express';
 import { uploadMultiple, handleUploadError } from '../middleware/upload.mjs';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
 import { authenticateToken } from '../middleware/auth.mjs';
-import { splitPDF, mergePDFs } from '../services/pdfService.mjs';
+import { splitPDF, mergePDFs, mergeSplitPDFs } from '../services/pdfService.mjs';
 import { addFileHistory } from '../services/databaseService.js';
 import archiver from 'archiver';
 import fs from 'fs';
@@ -109,6 +109,7 @@ router.post('/split',
           totalFiles: result.totalFiles,
           originalPages: result.originalPages,
           files: downloadUrls,
+          splitDir: path.basename(result.outputDir), // e.g. "split-1234567890" — needed for merge-all
           message: `Split into ${result.totalFiles} PDF files`
         }
       });
@@ -209,6 +210,91 @@ router.post('/merge',
       filePaths.forEach(p => {
         try { fs.unlinkSync(p); } catch {}
       });
+      res.status(500).json({ success: false, error: error.message });
+    }
+  })
+);
+
+// Merge split PDFs back into one
+router.post('/merge-split',
+  asyncHandler(async (req, res) => {
+    const { splitDir } = req.body;
+    
+    if (!splitDir) {
+      return res.status(400).json({ success: false, error: 'Split directory path is required' });
+    }
+
+    const fullPath = path.join('processed', splitDir);
+    
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ success: false, error: 'Split directory not found' });
+    }
+
+    const startTime = Date.now();
+
+    try {
+      const result = await mergeSplitPDFs(
+        fullPath,
+        (progress, message) => {
+          console.log(`[PDF MERGE SPLIT] ${progress}% - ${message}`);
+        }
+      );
+
+      // Upload to Supabase
+      let download_url = null;
+      let supabase_path = null;
+      
+      try {
+        const { uploadToSupabase } = await import('../services/supabaseService.js');
+        const sup = await uploadToSupabase(result.path, `pdf/${result.filename}`);
+        download_url = sup.publicUrl;
+        supabase_path = sup.supabasePath;
+      } catch (supErr) {
+        console.warn('[PDF MERGE SPLIT] Supabase upload failed:', supErr.message);
+        const relativePath = path.relative('processed', result.path).replace(/\\/g, '/');
+        download_url = `${process.env.BACKEND_URL || 'http://localhost:3001'}/processed/${relativePath}`;
+      }
+
+      // Save to database
+      const user_id = req.user?.id || new mongoose.Types.ObjectId();
+      
+      try {
+        await addFileHistory({
+          user_id: user_id,
+          original_filename: 'Split PDFs',
+          original_path: fullPath,
+          processed_filename: result.filename,
+          processed_path: result.path,
+          download_url: download_url,
+          supabase_path: supabase_path,
+          operation_type: 'pdf-merge-split',
+          operation_details: {
+            filesCount: result.filesCount,
+            totalPages: result.totalPages,
+            sourceDir: splitDir
+          },
+          file_size: 0,
+          processed_size: result.size,
+          processing_time: Date.now() - startTime,
+          status: 'completed'
+        });
+        console.log(`[PDF MERGE SPLIT] Saved to database: ${result.filename}`);
+      } catch (dbErr) {
+        console.error('[PDF MERGE SPLIT] Database save failed:', dbErr.message);
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          filename: result.filename,
+          totalPages: result.totalPages,
+          filesCount: result.filesCount,
+          size: result.size,
+          download_url
+        }
+      });
+    } catch (error) {
+      console.error('[PDF MERGE SPLIT] Error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   })

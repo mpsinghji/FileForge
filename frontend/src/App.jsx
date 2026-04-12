@@ -14,6 +14,7 @@ import QRCodePanel from './components/QRCodePanel';
 import ArchiveCreationPanel from './components/ArchiveCreationPanel';
 import HistoryPanel from './components/HistoryPanel';
 import SettingsPanel from './components/SettingsPanel';
+import PrivacyPolicy from './components/PrivacyPolicy';
 import AuthModal from './components/AuthModal';
 import { useLanguage } from './contexts/LanguageContext';
 import * as api from './services/api';
@@ -117,14 +118,24 @@ function App() {
         let initialResponse;
         switch (operationType) {
           case 'conversion':
-            initialResponse = await api.convertFile(file, options.targetFormat);
+            initialResponse = await api.convertFile(file, options.targetFormat || '');
             break;
           case 'compression':
-            initialResponse = await api.compressFile(file, options.compressionLevel, options.quality, options.removeMetadata);
+            initialResponse = await api.compressFile(
+              file,
+              options.compressionLevel || 'medium',
+              options.quality || 'high',
+              options.removeMetadata || false
+            );
             break;
           case 'extraction':
           case 'text-extraction':
-            initialResponse = await api.extractText(file, options.mode, options.includeMetadata, options.language);
+            initialResponse = await api.extractText(
+              file,
+              options.mode || 'auto',
+              options.includeMetadata || false,
+              options.language || 'auto'
+            );
             break;
           case 'archive-extraction':
             if (i === 0) {
@@ -141,6 +152,9 @@ function App() {
             if (initialResponse && initialResponse.success && initialResponse.data && initialResponse.data.files) {
               setLogs(prev => [...prev, `✅ Split into ${initialResponse.data.totalFiles} PDF files`]);
               
+              // splitDir is returned by the backend — pass it in the first doneFile item
+              const splitDir = initialResponse.data.splitDir || null;
+
               initialResponse.data.files.forEach((pdfFile, idx) => {
                 console.log(`[PDF SPLIT] Processing file ${idx + 1}:`, pdfFile);
                 
@@ -149,7 +163,9 @@ function App() {
                   processedFile: pdfFile.filename,
                   download_url: pdfFile.download_url,
                   pages: pdfFile.pages,
-                  size: pdfFile.size
+                  size: pdfFile.size,
+                  // Only inject into first item; panel reads it for merge-all
+                  ...(idx === 0 && splitDir ? { splitDir } : {})
                 };
                 setDoneFiles(prev => [...prev, doneItem]);
                 
@@ -203,8 +219,8 @@ function App() {
           throw new Error(initialResponse?.error || 'Failed to start processing');
         }
 
-        // Handle async polling for conversion/compression
-        if (operationType === 'conversion' || operationType === 'compression') {
+        // Handle async polling for conversion/compression/extraction
+        if (operationType === 'conversion' || operationType === 'compression' || operationType === 'extraction' || operationType === 'text-extraction') {
           const jobs = initialResponse.data.jobs || [];
           const currentJob = jobs.find(j => j.originalFile === file.name) || jobs[0];
 
@@ -219,6 +235,8 @@ function App() {
               let statusRes;
               if (operationType === 'compression') {
                 statusRes = await api.getCompressionStatus(currentJob.jobId);
+              } else if (operationType === 'extraction' || operationType === 'text-extraction') {
+                statusRes = await api.getExtractionStatus(currentJob.jobId);
               } else {
                 statusRes = await api.getJobStatus(currentJob.jobId);
               }
@@ -264,7 +282,10 @@ function App() {
               setDoneFiles(prev => [...prev, {
                 originalFile: file.name,
                 processedFile: resultData.processedFile || resultData.compressedFile || resultData.extractedFile || 'Unknown',
-                download_url: resultData.downloadUrl
+                download_url: resultData.downloadUrl,
+                originalSize: resultData.originalSize || file.size || 0,
+                compressedSize: resultData.compressedSize || resultData.processedSize || 0,
+                compressionRatio: resultData.compressionRatio || null,
               }]);
 
             } else {
@@ -286,6 +307,8 @@ function App() {
                 filesExtracted: r.filesExtracted,
                 processingTime: r.processingTime,
                 download_url: r.download_url,
+                size: r.size,
+                fileList: r.fileList || [],   // ← pass through for checklist
               };
               setDoneFiles(prev => [...prev, doneItem]);
               
@@ -432,6 +455,16 @@ function App() {
   useEffect(() => {
     // Skip authentication check - allow direct access
     setIsLoading(false);
+    
+    // Listen for auth modal open event
+    const handleOpenAuthModal = () => {
+      setShowAuthModal(true);
+    };
+    window.addEventListener('openAuthModal', handleOpenAuthModal);
+    
+    return () => {
+      window.removeEventListener('openAuthModal', handleOpenAuthModal);
+    };
     // checkAuthStatus();
   }, []);
 
@@ -567,6 +600,8 @@ function App() {
         return <HistoryPanel />;
       case 'settings':
         return <SettingsPanel />;
+      case 'privacy-policy':
+        return <PrivacyPolicy />;
       default:
         return (
           <ConversionPanel
@@ -680,6 +715,13 @@ function App() {
             </div>
           </main>
         </div>
+        
+        {/* Auth Modal for optional login */}
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          onAuthSuccess={handleAuthSuccess}
+        />
       </div>
     </DarkModeContext.Provider>
   );

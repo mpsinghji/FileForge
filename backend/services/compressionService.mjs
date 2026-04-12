@@ -50,10 +50,12 @@ export async function compressFile(inputPath, compressionLevel = 'medium', prese
       case 'audio':
         result = await compressAudio(inputPath, outputPath, compressionLevel, progressCallback);
         break;
-      case 'document':
-        result = await compressDocument(inputPath, outputPath, compressionLevel, progressCallback);
+    case 'document':
+        result = await compressDocument(inputPath, outputPath, compressionLevel, inputExt, progressCallback);
         break;
       case 'archive':
+        // Already-compressed archives: re-archiving won't shrink them noticeably
+        // Copy the file with a clear message rather than pretending to compress it
         result = await compressArchive(inputPath, outputPath, compressionLevel, progressCallback);
         break;
       default:
@@ -205,17 +207,19 @@ async function compressAudio(inputPath, outputPath, compressionLevel, progressCa
   });
 }
 
-async function compressDocument(inputPath, outputPath, compressionLevel, progressCallback) {
+async function compressDocument(inputPath, outputPath, compressionLevel, inputExt, progressCallback) {
   if (progressCallback) progressCallback(30, 'Compressing document...');
 
-  const inputExt = path.extname(inputPath).toLowerCase();
+  const ext = inputExt || path.extname(inputPath).toLowerCase();
 
-  if (inputExt === '.pdf') {
-    // For PDFs, we'll create a compressed version
-    // In a real implementation, you'd use pdf-lib or similar
+  if (ext === '.pdf') {
+    // For PDFs, use Ghostscript (best quality), fall back to pdf-lib
     await compressPdf(inputPath, outputPath, compressionLevel, progressCallback);
+  } else if (['.docx', '.pptx', '.odt', '.xlsx'].includes(ext)) {
+    // These are already ZIP-based formats; re-deflate with maximum compression
+    await recompressZipBased(inputPath, outputPath, compressionLevel, progressCallback);
   } else {
-    // For other documents, create a compressed archive
+    // Plain text, CSV, HTML, JSON, XML, Markdown etc. — deflate into a ZIP
     await createCompressedArchive(inputPath, outputPath, compressionLevel, progressCallback);
   }
 
@@ -254,10 +258,10 @@ async function compressArchive(inputPath, outputPath, compressionLevel, progress
 
 // Helper functions
 function getFileType(extension) {
-  const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'];
-  const videoExts = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm'];
-  const audioExts = ['.mp3', '.wav', '.ogg', '.aac', '.flac'];
-  const documentExts = ['.pdf', '.docx', '.doc', '.txt', '.rtf'];
+  const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp', '.heic', '.heif', '.avif'];
+  const videoExts = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv', '.m4v'];
+  const audioExts = ['.mp3', '.wav', '.ogg', '.aac', '.flac', '.m4a', '.opus', '.wma'];
+  const documentExts = ['.pdf', '.docx', '.doc', '.txt', '.rtf', '.odt', '.pptx', '.md', '.csv', '.html', '.htm', '.xml', '.json'];
   const archiveExts = ['.zip', '.rar', '.7z', '.tar', '.gz'];
 
   if (imageExts.includes(extension)) return 'image';
@@ -494,6 +498,53 @@ async function createCompressedArchive(inputPath, outputPath, compressionLevel, 
     archive.finalize();
   });
 }
+
+// Re-compress a ZIP-based Office document (DOCX/PPTX/XLSX/ODT) at maximum deflate level.
+// These files are internally ZIPs created by Office apps with moderate compression.
+// Re-deflating at level 9 typically saves 10-30%.
+async function recompressZipBased(inputPath, outputPath, compressionLevel, progressCallback) {
+  if (progressCallback) progressCallback(30, 'Re-compressing ZIP-based document...');
+
+  const zlibLevel = getArchiveCompressionSettings(compressionLevel).compressionLevel;
+
+  return new Promise((resolve, reject) => {
+    const unzipper = require && false ? null : null; // use dynamic import below
+    (async () => {
+      try {
+        const unzipperMod = await import('unzipper');
+        const directory = await unzipperMod.Open.file(inputPath);
+
+        const output = fs.createWriteStream(outputPath);
+        const archive = archiver('zip', { zlib: { level: zlibLevel } });
+
+        archive.on('error', (err) => reject(new Error(`Re-compress failed: ${err.message}`)));
+        output.on('close', () => {
+          if (progressCallback) progressCallback(100, 'Document recompression completed');
+          resolve();
+        });
+        archive.pipe(output);
+
+        for (const entry of directory.files) {
+          if (entry.type === 'Directory') continue;
+          const buf = await entry.buffer();
+          archive.append(buf, { name: entry.path });
+        }
+
+        archive.finalize();
+      } catch (err) {
+        // Fallback: just create a plain archive wrapper
+        console.warn('[COMPRESS] recompressZipBased failed, falling back:', err.message);
+        try {
+          await createCompressedArchive(inputPath, outputPath, compressionLevel, progressCallback);
+          resolve();
+        } catch (fallback) {
+          reject(fallback);
+        }
+      }
+    })();
+  });
+}
+
 
 export async function createArchiveFromFiles(inputPaths, outputFormat = 'zip', compressionLevel = 'medium', archiveName = null, password = null, progressCallback) {
   if (!Array.isArray(inputPaths) || inputPaths.length === 0) {

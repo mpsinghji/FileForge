@@ -8,6 +8,8 @@ function ArchiveCreationPanel({ files, setFiles, isProcessing, progressPercent, 
 	const { darkMode } = useDarkMode();
 	const [archiveFormat, setArchiveFormat] = useState('zip');
 	const [archiveName, setArchiveName] = useState('');
+	const [usePassword, setUsePassword] = useState(false);
+	const [password, setPassword] = useState('');
 	const [compressionLevel, setCompressionLevel] = useState(5);
 	const [formats, setFormats] = useState([]);
 	const [compressionLevels, setCompressionLevels] = useState([]);
@@ -35,6 +37,9 @@ function ArchiveCreationPanel({ files, setFiles, isProcessing, progressPercent, 
 			compressionLevel: compressionLevel,
 			archiveName: archiveName || `archive-${Date.now()}`
 		};
+		if (usePassword && password) {
+			options.password = password;
+		}
 		onProcess('archive-create', options);
 	};
 
@@ -158,6 +163,37 @@ function ArchiveCreationPanel({ files, setFiles, isProcessing, progressPercent, 
 								{compressionLevels.find(l => l.value === compressionLevel)?.description || 'Adjust compression'}
 							</p>
 						</div>
+
+						{/* Password Protection */}
+						<div className="mb-4">
+							<label className="flex items-center gap-2 cursor-pointer">
+								<input
+									type="checkbox"
+									checked={usePassword}
+									onChange={(e) => setUsePassword(e.target.checked)}
+									className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+								/>
+								<span className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+									🔒 Password Protection (AES-256)
+								</span>
+							</label>
+						</div>
+
+						{usePassword && (
+							<div className="mb-4">
+								<label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Password</label>
+								<input
+									type="password"
+									value={password}
+									onChange={(e) => setPassword(e.target.value)}
+									placeholder="Enter password (no restrictions)"
+									className={`w-full p-3 border-2 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all ${darkMode ? 'border-gray-600 bg-gray-700 text-white placeholder-gray-500' : 'border-gray-300 placeholder-gray-400'}`}
+								/>
+								<p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+									Archive will be encrypted with AES-256. Can be opened with any ZIP tool.
+								</p>
+							</div>
+						)}
 					</div>
 				</div>
 
@@ -169,9 +205,9 @@ function ArchiveCreationPanel({ files, setFiles, isProcessing, progressPercent, 
 						<div className="space-y-4">
 							<button
 								onClick={handleCreateArchive}
-								disabled={files.length === 0 || isProcessing}
+								disabled={files.length === 0 || isProcessing || (usePassword && !password)}
 								className={`w-full py-4 px-6 rounded-xl font-semibold text-lg transition-all duration-200 transform ${
-									files.length > 0 && !isProcessing
+									files.length > 0 && !isProcessing && (!usePassword || password)
 										? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:shadow-lg hover:scale-105 active:scale-95'
 										: darkMode
 										? 'bg-gray-700 text-gray-400 cursor-not-allowed'
@@ -201,8 +237,9 @@ function ArchiveCreationPanel({ files, setFiles, isProcessing, progressPercent, 
 							<h3 className={`font-semibold mb-2 ${darkMode ? 'text-purple-300' : 'text-purple-800'}`}>💡 Tips</h3>
 							<ul className={`text-sm space-y-1 ${darkMode ? 'text-purple-200' : 'text-purple-700'}`}>
 								<li>• ZIP format works everywhere</li>
-								<li>• Higher compression = smaller file, slower</li>
-								<li>• No external tools required!</li>
+								<li>• Password protection uses AES-256 encryption</li>
+								<li>• No external software required!</li>
+								<li>• Can be opened with WinRAR, 7-Zip, or built-in tools</li>
 							</ul>
 						</div>
 					</div>
@@ -239,6 +276,11 @@ function ArchiveCreationPanel({ files, setFiles, isProcessing, progressPercent, 
 											<span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-700'}`}>
 												{item.format?.toUpperCase()}
 											</span>
+											{item.isPasswordProtected && (
+												<span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700'}`}>
+													🔒 Protected
+												</span>
+											)}
 											<span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-700'}`}>
 												Level {item.compressionLevel}
 											</span>

@@ -54,6 +54,48 @@ export async function splitPDF(inputPath, options = {}, progressCallback) {
       
       fileIndex++;
     }
+  } else if (mode === 'odd') {
+    // Split odd pages only
+    const newPdf = await PDFDocument.create();
+    for (let i = 0; i < totalPages; i += 2) {
+      const [copiedPage] = await newPdf.copyPages(pdfDoc, [i]);
+      newPdf.addPage(copiedPage);
+    }
+    
+    const outputFilename = 'odd-pages.pdf';
+    const outputPath = path.join(outputDir, outputFilename);
+    const pdfBytesOut = await newPdf.save();
+    fs.writeFileSync(outputPath, pdfBytesOut);
+    
+    outputFiles.push({
+      filename: outputFilename,
+      path: outputPath,
+      pages: Math.ceil(totalPages / 2),
+      size: pdfBytesOut.length
+    });
+    
+    if (progressCallback) progressCallback(90, 'Created odd pages PDF');
+  } else if (mode === 'even') {
+    // Split even pages only
+    const newPdf = await PDFDocument.create();
+    for (let i = 1; i < totalPages; i += 2) {
+      const [copiedPage] = await newPdf.copyPages(pdfDoc, [i]);
+      newPdf.addPage(copiedPage);
+    }
+    
+    const outputFilename = 'even-pages.pdf';
+    const outputPath = path.join(outputDir, outputFilename);
+    const pdfBytesOut = await newPdf.save();
+    fs.writeFileSync(outputPath, pdfBytesOut);
+    
+    outputFiles.push({
+      filename: outputFilename,
+      path: outputPath,
+      pages: Math.floor(totalPages / 2),
+      size: pdfBytesOut.length
+    });
+    
+    if (progressCallback) progressCallback(90, 'Created even pages PDF');
   } else if (mode === 'ranges' && ranges.length > 0) {
     // Split by custom ranges
     for (let i = 0; i < ranges.length; i++) {
@@ -148,4 +190,33 @@ export async function mergePDFs(inputPaths, options = {}, progressCallback) {
     totalPages,
     filesCount: inputPaths.length
   };
+}
+
+/**
+ * Merge split PDF files back into one
+ * @param {string} splitDir - Directory containing split PDFs
+ * @returns {Promise<object>} - Result with merged PDF path
+ */
+export async function mergeSplitPDFs(splitDir, progressCallback) {
+  if (progressCallback) progressCallback(10, 'Finding split PDF files...');
+  
+  // Get all PDF files in the directory
+  const files = fs.readdirSync(splitDir)
+    .filter(f => f.endsWith('.pdf'))
+    .sort((a, b) => {
+      // Sort by number in filename (split-1.pdf, split-2.pdf, etc.)
+      const numA = parseInt(a.match(/\d+/)?.[0] || '0');
+      const numB = parseInt(b.match(/\d+/)?.[0] || '0');
+      return numA - numB;
+    })
+    .map(f => path.join(splitDir, f));
+  
+  if (files.length === 0) {
+    throw new Error('No PDF files found in directory');
+  }
+  
+  if (progressCallback) progressCallback(20, `Found ${files.length} PDF files to merge`);
+  
+  // Use the existing mergePDFs function
+  return await mergePDFs(files, {}, progressCallback);
 }

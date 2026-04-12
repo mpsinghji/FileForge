@@ -1,141 +1,130 @@
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import archiver from './archiverSetup.mjs';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execPromise = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Encrypt a file using password-protected ZIP (AES-256)
- * @param {string} inputPath - Path to input file
- * @param {string} password - Encryption password
- * @param {function} progressCallback - Progress callback
- * @returns {Promise<object>} - Result with encrypted file path
  */
 export async function encryptFile(inputPath, password, progressCallback) {
-  if (!password || password.length < 8) {
-    throw new Error('Password must be at least 8 characters long');
-  }
-  
+  if (!password) throw new Error('Password is required for encryption');
   if (progressCallback) progressCallback(10, 'Preparing encryption...');
-  
+
   const outputDir = path.join('processed', `encrypted-${Date.now()}`);
   fs.mkdirSync(outputDir, { recursive: true });
-  
+
   const originalName = path.basename(inputPath);
-  const outputFilename = `${originalName}.zip`; // Use .zip extension
+  const outputFilename = `${originalName}.zip`;
   const outputPath = path.join(outputDir, outputFilename);
-  
+
   if (progressCallback) progressCallback(30, 'Encrypting with AES-256...');
-  
-  try {
-    // Use 7-Zip to create password-protected ZIP with AES-256 encryption
-    const command = `7z a -tzip -mem=AES256 -p${password} "${outputPath}" "${inputPath}"`;
-    
-    const { stdout, stderr } = await execPromise(command);
-    console.log('[ENCRYPT] 7-Zip output:', stdout);
-    
-    if (stderr && !stderr.includes('Everything is Ok')) {
-      console.warn('[ENCRYPT] 7-Zip warnings:', stderr);
-    }
-  } catch (error) {
-    console.error('[ENCRYPT] 7-Zip error:', error);
-    throw new Error(`Encryption failed: ${error.message}`);
-  }
-  
-  if (progressCallback) progressCallback(80, 'Verifying encrypted file...');
-  
-  if (!fs.existsSync(outputPath)) {
-    throw new Error('Encryption failed - output file not found');
-  }
-  
-  const inputStats = fs.statSync(inputPath);
-  const outputStats = fs.statSync(outputPath);
-  
-  if (progressCallback) progressCallback(100, 'Encryption completed!');
-  
-  return {
-    success: true,
-    filename: outputFilename,
-    path: outputPath,
-    size: outputStats.size,
-    originalSize: inputStats.size,
-    algorithm: 'AES-256 (ZIP)'
-  };
+
+  return new Promise((resolve, reject) => {
+    const output = fs.createWriteStream(outputPath);
+    const archive = archiver.create('zip-encrypted', {
+      zlib: { level: 9 },
+      encryptionMethod: 'aes256',
+      password: password
+    });
+
+    output.on('close', () => {
+      if (progressCallback) progressCallback(100, 'Encryption completed!');
+      const inputStats = fs.statSync(inputPath);
+      const outputStats = fs.statSync(outputPath);
+      resolve({
+        success: true,
+        filename: outputFilename,
+        path: outputPath,
+        size: outputStats.size,
+        originalSize: inputStats.size,
+        algorithm: 'AES-256 (ZIP)'
+      });
+    });
+
+    output.on('error', (err) => reject(new Error(`Failed to write encrypted file: ${err.message}`)));
+    archive.on('error', (err) => reject(new Error(`Encryption failed: ${err.message}`)));
+    archive.on('warning', (err) => {
+      if (err.code !== 'ENOENT') reject(err);
+    });
+
+    archive.pipe(output);
+    if (progressCallback) progressCallback(50, 'Adding file to encrypted archive...');
+    archive.file(inputPath, { name: originalName });
+    if (progressCallback) progressCallback(70, 'Finalizing encryption...');
+    archive.finalize();
+  });
 }
 
 /**
- * Decrypt a password-protected ZIP file
- * @param {string} inputPath - Path to encrypted ZIP file
- * @param {string} password - Decryption password
- * @param {function} progressCallback - Progress callback
- * @returns {Promise<object>} - Result with decrypted file path
+ * Decrypt a password-protected AES-256 ZIP file using 7-Zip.
+ * The `unzipper` npm package cannot handle AES-256 encrypted ZIPs;
+ * 7-Zip handles them natively.
  */
 export async function decryptFile(inputPath, password, progressCallback) {
-  if (!password) {
-    throw new Error('Password is required for decryption');
-  }
-  
+  if (!password) throw new Error('Password is required for decryption');
   if (progressCallback) progressCallback(10, 'Reading encrypted file...');
-  
+
   const outputDir = path.join('processed', `decrypted-${Date.now()}`);
   fs.mkdirSync(outputDir, { recursive: true });
-  
-  if (progressCallback) progressCallback(30, 'Decrypting...');
-  
+
+  if (progressCallback) progressCallback(30, 'Decrypting with 7-Zip...');
+
+  // Resolve 7zip binary path
+  let sevenZipBin;
   try {
-    // Use 7-Zip to extract password-protected ZIP
-    const command = `7z x -p${password} -o"${outputDir}" "${inputPath}" -y`;
-    
-    const { stdout, stderr } = await execPromise(command);
-    console.log('[DECRYPT] 7-Zip output:', stdout);
-    
-    if (stderr && !stderr.includes('Everything is Ok')) {
-      console.warn('[DECRYPT] 7-Zip warnings:', stderr);
-    }
-  } catch (error) {
-    console.error('[DECRYPT] 7-Zip error:', error);
-    
-    // Check if it's a wrong password error
-    if (error.message.includes('Wrong password') || error.message.includes('Can not open encrypted archive')) {
-      throw new Error('WRONG_PASSWORD: Incorrect password or corrupted file');
-    }
-    
-    throw new Error(`Decryption failed: ${error.message}`);
+    const sevenZipModule = await import('7zip-bin');
+    sevenZipBin = sevenZipModule.path7za || sevenZipModule.default;
+  } catch {
+    throw new Error('7-Zip binary not found. Please ensure 7zip-bin is installed.');
   }
-  
-  if (progressCallback) progressCallback(70, 'Extracting decrypted file...');
-  
-  // Find the extracted file
-  const extractedFiles = fs.readdirSync(outputDir);
-  
-  if (extractedFiles.length === 0) {
-    throw new Error('Decryption failed - no files extracted');
-  }
-  
-  // Get the first extracted file (should be the original file)
-  let originalFilename = extractedFiles[0];
-  let extractedPath = path.join(outputDir, originalFilename);
-  
-  // If multiple files, they're in a subdirectory
-  if (fs.statSync(extractedPath).isDirectory()) {
-    const subFiles = fs.readdirSync(extractedPath);
-    if (subFiles.length > 0) {
-      originalFilename = subFiles[0];
-      extractedPath = path.join(extractedPath, originalFilename);
+
+  // Use 7z e (extract) with -o (output dir) and -p (password)
+  const absInput = path.resolve(inputPath);
+  const absOutput = path.resolve(outputDir);
+
+  try {
+    await execFileAsync(sevenZipBin, [
+      'e',                    // extract (flat, no dir structure)
+      absInput,               // input file
+      `-p${password}`,        // password — no space between -p and value
+      `-o${absOutput}`,       // output directory
+      '-y',                   // yes to all prompts
+    ]);
+  } catch (err) {
+    // 7z exits with code 2 on wrong password / corrupt archive
+    const msg = (err.stderr || err.message || '').toLowerCase();
+    if (msg.includes('wrong password') || msg.includes('cannot open encrypted')
+      || (err.code === 2 && !msg.includes('warning'))) {
+      throw new Error('WRONG_PASSWORD: Incorrect password or corrupted encrypted file');
     }
+    throw new Error(`Decryption failed: ${err.stderr || err.message}`);
   }
-  
+
+  if (progressCallback) progressCallback(80, 'Locating decrypted file...');
+
+  // Find the extracted file(s) in the output directory
+  const extractedEntries = fs.readdirSync(outputDir);
+  if (extractedEntries.length === 0) {
+    throw new Error('WRONG_PASSWORD: No files were extracted — password may be incorrect');
+  }
+
+  // If multiple files, pick the first non-hidden one
+  const extractedName = extractedEntries.find(n => !n.startsWith('.')) || extractedEntries[0];
+  const extractedPath = path.join(outputDir, extractedName);
+
   const encryptedStats = fs.statSync(inputPath);
   const decryptedStats = fs.statSync(extractedPath);
-  
+
   if (progressCallback) progressCallback(100, 'Decryption completed!');
-  
+
   return {
     success: true,
-    filename: originalFilename,
+    filename: extractedName,
     path: extractedPath,
     size: decryptedStats.size,
-    encryptedSize: encryptedStats.size
+    encryptedSize: encryptedStats.size,
   };
 }

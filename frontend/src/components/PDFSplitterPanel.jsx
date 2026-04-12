@@ -9,6 +9,9 @@ function PDFSplitterPanel({ files, setFiles, isProcessing, progressPercent, logs
 	const [splitMode, setSplitMode] = useState('pages');
 	const [pagesPerFile, setPagesPerFile] = useState(1);
 	const [customRanges, setCustomRanges] = useState('');
+	const [lastSplitDir, setLastSplitDir] = useState(null);
+	const [isMerging, setIsMerging] = useState(false);
+	const [mergeAfterSplit, setMergeAfterSplit] = useState(false);
 
 	const handleStartSplit = () => {
 		let ranges = [];
@@ -39,6 +42,62 @@ function PDFSplitterPanel({ files, setFiles, isProcessing, progressPercent, logs
 		}
 		onProcess('pdf-split', { mode: splitMode, pagesPerFile, ranges });
 	};
+
+	const handleMergeSplit = async () => {
+		if (!lastSplitDir) {
+			alert('No split directory found. Please split a PDF first.');
+			return;
+		}
+
+		setIsMerging(true);
+		try {
+			const result = await api.mergeSplitPDFs(lastSplitDir);
+			if (result.success) {
+				alert(`Successfully merged ${result.data.filesCount} PDFs into one file with ${result.data.totalPages} pages!`);
+				// Trigger download
+				if (result.data.download_url) {
+					const a = document.createElement('a');
+					a.href = result.data.download_url;
+					a.download = result.data.filename;
+					document.body.appendChild(a);
+					a.click();
+					document.body.removeChild(a);
+				}
+			}
+		} catch (error) {
+			console.error('Merge error:', error);
+			alert(`Failed to merge PDFs: ${error.message}`);
+		} finally {
+			setIsMerging(false);
+		}
+	};
+
+	// Extract split directory from done files — prefer the explicit splitDir field
+	// injected by App.jsx (works for both local and Supabase URLs).
+	// Fall back to regex on the URL for backwards-compat with cached results.
+	React.useEffect(() => {
+		if (doneFiles && doneFiles.length > 0) {
+			// Prefer explicit splitDir injected from API response
+			if (doneFiles[0].splitDir) {
+				console.log('[PDF SPLIT] Using explicit splitDir:', doneFiles[0].splitDir);
+				setLastSplitDir(doneFiles[0].splitDir);
+				return;
+			}
+			// Fallback: try to parse from local URL
+			const url = doneFiles[0].download_url || '';
+			console.log('[PDF SPLIT] Falling back to URL regex for splitDir. URL:', url);
+			const match = url.match(/split-\d+/);
+			if (match) {
+				console.log('[PDF SPLIT] Found split directory from URL:', match[0]);
+				setLastSplitDir(match[0]);
+			} else {
+				console.log('[PDF SPLIT] Could not extract split directory');
+				setLastSplitDir(null);
+			}
+		} else {
+			setLastSplitDir(null);
+		}
+	}, [doneFiles]);
 
 	return (
 		<div className="space-y-6">
@@ -75,7 +134,9 @@ function PDFSplitterPanel({ files, setFiles, isProcessing, progressPercent, logs
 								className={`w-full p-3 border-2 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all ${darkMode ? 'border-gray-600 bg-gray-700 text-white' : 'border-gray-300'}`}
 							>
 								<option value="pages">📄 Split by Pages</option>
-								<option value="ranges">📊 Custom Ranges</option>
+								<option value="odd">📊 Odd Pages Only</option>
+								<option value="even">📈 Even Pages Only</option>
+								<option value="ranges">📋 Custom Ranges</option>
 							</select>
 						</div>
 
@@ -108,6 +169,30 @@ function PDFSplitterPanel({ files, setFiles, isProcessing, progressPercent, logs
 								</p>
 							</div>
 						)}
+
+						{/* Optional: merge-after-split checkbox */}
+						<div className={`mt-2 p-4 rounded-xl border-2 transition-all duration-200 ${
+							mergeAfterSplit
+								? darkMode ? 'border-green-600 bg-green-900/30' : 'border-green-400 bg-green-50'
+								: darkMode ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'
+						}`}>
+							<label className="flex items-center gap-3 cursor-pointer">
+								<input
+									type="checkbox"
+									checked={mergeAfterSplit}
+									onChange={(e) => setMergeAfterSplit(e.target.checked)}
+									className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500"
+								/>
+								<div>
+									<div className={`font-medium text-sm ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+										📑 Merge Splitted Pages
+									</div>
+									<div className={`text-xs mt-0.5 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+										When enabled, after splitting you'll get one button to download the merged PDF instead of individual files
+									</div>
+								</div>
+							</label>
+						</div>
 					</div>
 				</div>
 
@@ -157,39 +242,83 @@ function PDFSplitterPanel({ files, setFiles, isProcessing, progressPercent, logs
 						/>
 					</div>
 
-					{/* Download section */}
 					{doneFiles && doneFiles.length > 0 && (
 						<div className={`rounded-2xl shadow-lg p-6 ${darkMode ? 'bg-gray-800' : 'bg-white'} transform hover:shadow-xl transition-all duration-200`}>
-							<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>📥 Download Split PDFs</h2>
-							<div className="space-y-3">
-								{doneFiles.map((item, idx) => (
-									<div key={idx} className={`flex items-center justify-between p-4 rounded-xl border-2 transform hover:scale-[1.02] transition-all duration-200 ${darkMode ? 'bg-gray-700 border-gray-600 hover:border-red-500' : 'bg-red-50 border-red-200 hover:border-red-400'}`}>
-										<div className="flex items-center gap-3 min-w-0">
-											<span className="text-2xl flex-shrink-0">📄</span>
-											<div className="min-w-0">
-												<div className={`font-medium text-sm truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{item.originalFile}</div>
-												<div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-													{item.pages ? `Pages: ${item.pages}` : 'PDF file'}
-													{item.size && ` • ${(item.size / 1024).toFixed(1)} KB`}
-												</div>
-											</div>
-										</div>
-										{item.download_url && (
-											<button
-												onClick={() => onDownload(item)}
-												className="ml-3 flex-shrink-0 bg-gradient-to-r from-red-600 to-pink-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 flex items-center gap-1"
-											>
-												⬇️ Download
-											</button>
-										)}
-									</div>
-								))}
-							</div>
-							<div className={`mt-4 p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-blue-50'}`}>
-								<p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-									✅ Successfully split into {doneFiles.length} PDF file{doneFiles.length > 1 ? 's' : ''}
+							<h2 className={`text-xl font-semibold mb-4 ${darkMode ? 'text-white' : 'text-gray-800'}`}>📥 Split Results</h2>
+
+							{/* Summary */}
+							<div className={`mb-4 p-3 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-red-50'}`}>
+								<p className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+									✅ Split into {doneFiles.length} PDF file{doneFiles.length > 1 ? 's' : ''}
 								</p>
 							</div>
+
+							{/* CASE 1: mergeAfterSplit enabled — show Merge + Download Merged only */}
+							{mergeAfterSplit ? (
+								<div className="space-y-3">
+									{lastSplitDir ? (
+										<div className={`p-4 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-300 dark:border-green-700`}>
+											<div className="flex items-center gap-2 mb-3">
+												<span className="text-2xl">📑</span>
+												<h3 className={`font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Merge Splitted Pages</h3>
+											</div>
+											<button
+												onClick={handleMergeSplit}
+												disabled={isMerging}
+												className={`w-full py-4 px-6 rounded-xl font-bold text-lg transition-all duration-200 transform ${
+													!isMerging
+														? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:shadow-lg hover:scale-105 active:scale-95 shadow-md'
+														: 'bg-gray-400 text-gray-200 cursor-not-allowed'
+												}`}
+											>
+												{isMerging ? (
+													<div className="flex items-center justify-center gap-2">
+														<div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+														<span>Merging PDFs...</span>
+													</div>
+												) : (
+													<div className="flex items-center justify-center gap-2">
+														<span>🔄</span>
+														<span>Merge All {doneFiles.length} Pages & Download</span>
+													</div>
+												)}
+											</button>
+										</div>
+									) : (
+										<div className={`p-3 rounded-lg ${darkMode ? 'bg-yellow-900/30 border border-yellow-700' : 'bg-yellow-50 border border-yellow-300'}`}>
+											<p className="text-sm text-yellow-700 dark:text-yellow-300">⚠️ Merge not available — split directory not found</p>
+										</div>
+									)}
+								</div>
+							) : (
+								/* CASE 2: mergeAfterSplit disabled — individual download per page */
+								<div className="space-y-2">
+									{doneFiles.map((item, idx) => (
+										<div key={idx} className={`flex items-center justify-between p-4 rounded-xl border-2 hover:scale-[1.01] transition-all duration-200 ${darkMode ? 'bg-gray-700 border-gray-600 hover:border-red-500' : 'bg-red-50 border-red-200 hover:border-red-400'}`}>
+											<div className="flex items-center gap-3 min-w-0">
+												<span className="text-2xl flex-shrink-0">📄</span>
+												<div className="min-w-0">
+													<div className={`font-medium text-sm truncate ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+														Page {idx + 1} of {doneFiles.length}
+													</div>
+													<div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+														{item.pages ? `Pages: ${item.pages}` : 'PDF file'}
+														{item.size && ` • ${(item.size / 1024).toFixed(1)} KB`}
+													</div>
+												</div>
+											</div>
+											{item.download_url && (
+												<button
+													onClick={() => onDownload(item)}
+													className="ml-3 flex-shrink-0 bg-gradient-to-r from-red-600 to-pink-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:shadow-lg hover:scale-105 active:scale-95 transition-all duration-200"
+												>
+													⬇️ Download
+												</button>
+											)}
+										</div>
+									))}
+								</div>
+							)}
 						</div>
 					)}
 				</div>

@@ -23,11 +23,11 @@ router.post('/encrypt',
     const { password } = req.body;
     const startTime = Date.now();
 
-    if (!password || password.length < 8) {
+    if (!password) {
       try { fs.unlinkSync(file.path); } catch {}
       return res.status(400).json({ 
         success: false, 
-        error: 'Password is required and must be at least 8 characters long' 
+        error: 'Password is required for encryption' 
       });
     }
 

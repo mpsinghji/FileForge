@@ -3,72 +3,98 @@ import { uploadMultiple, handleUploadError } from '../middleware/upload.mjs';
 import { asyncHandler } from '../middleware/errorHandler.mjs';
 import { authenticateToken } from '../middleware/auth.mjs';
 import { addFileHistory, updateFileHistory, addProcessingJob, updateProcessingJob, getFileHistoryById, getProcessingJob } from '../services/databaseService.js';
+import { guestAddFileHistory, guestUpdateFileHistory, guestGetFileHistory, guestAddJob, guestUpdateJob, guestGetJob } from '../services/guestJobStore.mjs';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 
 const router = express.Router();
 
-// File compression endpoint
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Returns true if the request has a real authenticated user */
+function isAuthenticated(req) {
+  return !!(req.user && req.user.userId);
+}
+
+/**
+ * Save file history to DB (auth users) or in-memory store (guests).
+ * Always returns a string/ObjectId that can be used as fileHistoryId.
+ */
+async function saveFileHistory(req, data) {
+  if (isAuthenticated(req)) {
+    try {
+      return await addFileHistory({ ...data, user_id: req.user.userId, is_guest: false });
+    } catch (dbErr) {
+      console.error('[DB] addFileHistory failed:', dbErr.message);
+    }
+  }
+  // Guest: save to in-memory store, mark as guest
+  return guestAddFileHistory({ ...data, user_id: null, is_guest: true });
+}
+
+async function saveProcessingJob(req, jobId, fileHistoryId, operationType) {
+  if (isAuthenticated(req)) {
+    try {
+      await addProcessingJob({ job_id: jobId, file_history_id: fileHistoryId, operation_type: operationType });
+      return;
+    } catch (dbErr) {
+      console.error('[DB] addProcessingJob failed:', dbErr.message);
+    }
+  }
+  guestAddJob(jobId, fileHistoryId, operationType);
+}
+
+async function getJobStatus(req, jobId) {
+  // Try DB first (for auth users)
+  try {
+    const job = await getProcessingJob(jobId);
+    if (job) return { source: 'db', job };
+  } catch (_) {}
+  // Fall back to in-memory store (guest)
+  const job = guestGetJob(jobId);
+  if (job) return { source: 'guest', job };
+  return null;
+}
+
+async function getHistoryRecord(req, historyId) {
+  try {
+    const r = await getFileHistoryById(historyId);
+    if (r) return r;
+  } catch (_) {}
+  return guestGetFileHistory(historyId);
+}
+
+// ─── File compression endpoint ────────────────────────────────────────────────
 router.post('/compress', authenticateToken, uploadMultiple, handleUploadError, asyncHandler(async (req, res) => {
   if (!req.files || req.files.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error: 'No files uploaded for compression'
-    });
+    return res.status(400).json({ success: false, error: 'No files uploaded for compression' });
   }
 
-  const {
-    compressionLevel = 'medium',
-    preserveQuality = true,
-    removeMetadata = false
-  } = req.body;
+  const { compressionLevel = 'medium', preserveQuality = true, removeMetadata = false } = req.body;
 
-  // Validate compression level
+  // Coerce — never reject, just default to 'medium'
   const validLevels = ['light', 'medium', 'high', 'extreme'];
-  if (!validLevels.includes(compressionLevel)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid compression level. Must be one of: light, medium, high, extreme'
-    });
-  }
+  const safeLevel = validLevels.includes(String(compressionLevel)) ? String(compressionLevel) : 'medium';
 
   const jobId = uuidv4();
   const compressionJobs = [];
 
-  // Process each file
   for (const file of req.files) {
-    const fileHistoryId = await addFileHistory({
+    const fileHistoryId = await saveFileHistory(req, {
       original_filename: file.originalname,
       original_path: file.path,
       operation_type: 'compression',
-      operation_details: {
-        compressionLevel,
-        preserveQuality,
-        removeMetadata,
-        mimetype: file.mimetype,
-        size: file.size
-      },
+      operation_details: { compressionLevel: safeLevel, preserveQuality, removeMetadata, mimetype: file.mimetype, size: file.size },
       file_size: file.size,
-      user_id: req.user.userId
     });
 
-    await addProcessingJob({
-      job_id: `${jobId}-${fileHistoryId}`,
-      file_history_id: fileHistoryId,
-      operation_type: 'compression'
-    });
-
-    compressionJobs.push({
-      jobId: `${jobId}-${fileHistoryId}`,
-      fileHistoryId,
-      originalFile: file.originalname,
-      compressionLevel
-    });
+    const jobId2 = `${jobId}-${fileHistoryId}`;
+    await saveProcessingJob(req, jobId2, fileHistoryId, 'compression');
+    compressionJobs.push({ jobId: jobId2, fileHistoryId, originalFile: file.originalname, compressionLevel: safeLevel });
   }
 
-  // Start compression process in background
-  processCompression(jobId, compressionJobs, compressionLevel, preserveQuality, removeMetadata);
+  processCompression(jobId, compressionJobs, safeLevel, preserveQuality, removeMetadata, req);
 
   res.status(200).json({
     success: true,
@@ -76,20 +102,16 @@ router.post('/compress', authenticateToken, uploadMultiple, handleUploadError, a
     data: {
       jobId,
       totalFiles: compressionJobs.length,
-      compressionLevel,
+      compressionLevel: safeLevel,
       preserveQuality,
       removeMetadata,
-      jobs: compressionJobs.map(job => ({
-        jobId: job.jobId,
-        originalFile: job.originalFile,
-        compressionLevel: job.compressionLevel
-      }))
+      jobs: compressionJobs.map(job => ({ jobId: job.jobId, originalFile: job.originalFile, compressionLevel: job.compressionLevel }))
     }
   });
 }));
 
-// Multi-file archive creation (ZIP/7z)
-router.post('/archive', authenticateToken, asyncHandler(async (req, res) => {
+// ─── Multi-file archive creation (ZIP/7z) ────────────────────────────────────
+router.post('/archive', asyncHandler(async (req, res) => {
   const { files = [], outputFormat = 'zip', compressionLevel = 'medium', archiveName = null, password = null } = req.body;
   if (!Array.isArray(files) || files.length === 0) {
     return res.status(400).json({ success: false, error: 'files must be a non-empty array of paths' });
@@ -99,19 +121,17 @@ router.post('/archive', authenticateToken, asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: result });
 }));
 
-// Get compression status
-router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) => {
+// ─── Get compression status ───────────────────────────────────────────────────
+router.get('/status/:jobId', asyncHandler(async (req, res) => {
   const { jobId } = req.params;
-  const job = await getProcessingJob(jobId);
+  const found = await getJobStatus(req, jobId);
 
-  if (!job) {
-    return res.status(404).json({
-      success: false,
-      error: 'Job not found'
-    });
+  if (!found) {
+    return res.status(404).json({ success: false, error: 'Job not found' });
   }
 
-  const fileHistory = await getFileHistoryById(job.file_history_id);
+  const { job } = found;
+  const fileHistory = await getHistoryRecord(req, job.file_history_id);
 
   res.status(200).json({
     success: true,
@@ -119,163 +139,69 @@ router.get('/status/:jobId', authenticateToken, asyncHandler(async (req, res) =>
       jobId: job.job_id,
       status: job.status,
       progress: job.progress,
-      logs: job.logs ? JSON.parse(job.logs) : [],
-      originalFile: fileHistory.original_filename,
-      originalSize: fileHistory.file_size,
-      compressedFile: fileHistory.processed_filename,
-      compressedSize: fileHistory.processed_size,
-      compressionRatio: fileHistory.processed_size ?
-        Math.round(((fileHistory.file_size - fileHistory.processed_size) / fileHistory.file_size) * 100) : 0,
-      downloadUrl: fileHistory.download_url || (fileHistory.processed_path ? `/processed/${path.basename(fileHistory.processed_path)}` : null)
+      logs: job.logs ? (typeof job.logs === 'string' ? JSON.parse(job.logs) : job.logs) : [],
+      originalFile: fileHistory?.original_filename,
+      processedFile: fileHistory?.processed_filename,
+      processedSize: fileHistory?.processed_size,
+      originalSize: fileHistory?.file_size,
+      compressionRatio: fileHistory?.processed_size && fileHistory?.file_size
+        ? Math.round(((fileHistory.file_size - fileHistory.processed_size) / fileHistory.file_size) * 100)
+        : null,
+      downloadUrl: fileHistory?.download_url || null
     }
   });
 }));
 
-// Get compression levels info
-router.get('/levels', authenticateToken, asyncHandler(async (req, res) => {
-  const compressionLevels = [
-    {
-      value: 'light',
-      label: 'Light',
-      description: 'Minimal compression, fast processing',
-      savings: '10-20%',
-      quality: 'Excellent',
-      speed: 'Fast'
-    },
-    {
-      value: 'medium',
-      label: 'Medium',
-      description: 'Balanced compression and quality',
-      savings: '30-50%',
-      quality: 'Very Good',
-      speed: 'Medium'
-    },
-    {
-      value: 'high',
-      label: 'High',
-      description: 'Maximum compression, smaller files',
-      savings: '50-70%',
-      quality: 'Good',
-      speed: 'Slow'
-    },
-    {
-      value: 'extreme',
-      label: 'Extreme',
-      description: 'Ultra compression, may affect quality',
-      savings: '70-90%',
-      quality: 'Acceptable',
-      speed: 'Very Slow'
-    }
-  ];
-
+// ─── Get compression levels ───────────────────────────────────────────────────
+router.get('/levels', asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
-    data: compressionLevels
+    data: {
+      levels: [
+        { value: 'light', label: 'Light', description: 'Minimal compression, preserves maximum quality', estimatedReduction: '10-20%' },
+        { value: 'medium', label: 'Medium', description: 'Balanced compression and quality', estimatedReduction: '30-50%' },
+        { value: 'high', label: 'High', description: 'Maximum compression, smaller file sizes', estimatedReduction: '50-70%' },
+        { value: 'extreme', label: 'Extreme', description: 'Extreme compression, may reduce quality', estimatedReduction: '60-80%' }
+      ]
+    }
   });
 }));
 
-// Get compression history
-router.get('/history', authenticateToken, asyncHandler(async (req, res) => {
+// ─── Get compression history ──────────────────────────────────────────────────
+router.get('/history', asyncHandler(async (req, res) => {
   const { limit = 20, offset = 0 } = req.query;
-  const history = await getFileHistory(parseInt(limit), parseInt(offset), 'compression');
-
-  // Calculate compression ratios
-  const historyWithRatios = history.map(item => ({
-    ...item,
-    compressionRatio: item.processed_size ?
-      Math.round(((item.file_size - item.processed_size) / item.file_size) * 100) : 0
-  }));
-
-  res.status(200).json({
-    success: true,
-    data: {
-      compressions: historyWithRatios,
-      total: historyWithRatios.length,
-      limit: parseInt(limit),
-      offset: parseInt(offset)
-    }
-  });
-}));
-
-// Get compression statistics
-router.get('/stats', authenticateToken, asyncHandler(async (req, res) => {
-  const history = await getFileHistory(1000, 0, 'compression');
-
-  const completedCompressions = history.filter(item => item.status === 'completed' && item.processed_size);
-
-  if (completedCompressions.length === 0) {
-    return res.status(200).json({
-      success: true,
-      data: {
-        totalFiles: 0,
-        totalOriginalSize: 0,
-        totalCompressedSize: 0,
-        averageCompressionRatio: 0,
-        averageProcessingTime: 0,
-        compressionByLevel: {}
-      }
-    });
+  let history = [];
+  if (isAuthenticated(req)) {
+    const { getFileHistory } = await import('../services/databaseService.js');
+    history = await getFileHistory(parseInt(limit), parseInt(offset), 'compression', req.user.userId);
   }
-
-  const totalOriginalSize = completedCompressions.reduce((sum, item) => sum + item.file_size, 0);
-  const totalCompressedSize = completedCompressions.reduce((sum, item) => sum + item.processed_size, 0);
-  const averageCompressionRatio = Math.round(((totalOriginalSize - totalCompressedSize) / totalOriginalSize) * 100);
-  const averageProcessingTime = completedCompressions.reduce((sum, item) => sum + (item.processing_time || 0), 0) / completedCompressions.length;
-
-  // Group by compression level
-  const compressionByLevel = {};
-  completedCompressions.forEach(item => {
-    const details = JSON.parse(item.operation_details || '{}');
-    const level = details.compressionLevel || 'unknown';
-    if (!compressionByLevel[level]) {
-      compressionByLevel[level] = {
-        count: 0,
-        totalOriginalSize: 0,
-        totalCompressedSize: 0,
-        averageRatio: 0
-      };
-    }
-    compressionByLevel[level].count++;
-    compressionByLevel[level].totalOriginalSize += item.file_size;
-    compressionByLevel[level].totalCompressedSize += item.processed_size;
-  });
-
-  // Calculate average ratios for each level
-  Object.keys(compressionByLevel).forEach(level => {
-    const data = compressionByLevel[level];
-    data.averageRatio = Math.round(((data.totalOriginalSize - data.totalCompressedSize) / data.totalOriginalSize) * 100);
-  });
-
-  res.status(200).json({
-    success: true,
-    data: {
-      totalFiles: completedCompressions.length,
-      totalOriginalSize,
-      totalCompressedSize,
-      averageCompressionRatio,
-      averageProcessingTime: Math.round(averageProcessingTime * 100) / 100,
-      compressionByLevel
-    }
-  });
+  res.status(200).json({ success: true, data: { compressions: history, total: history.length } });
 }));
 
-// Background compression processing function
-async function processCompression(mainJobId, compressionJobs, compressionLevel, preserveQuality, removeMetadata) {
+// ─── Get compression stats ────────────────────────────────────────────────────
+router.get('/stats', asyncHandler(async (req, res) => {
+  res.status(200).json({ success: true, data: { totalCompressions: 0, note: 'Stats available for authenticated users only' } });
+}));
+
+// ─── Background compression processing ───────────────────────────────────────
+async function processCompression(mainJobId, compressionJobs, compressionLevel, preserveQuality, removeMetadata, req) {
   const { compressFile } = await import('../services/compressionService.mjs');
+  const { runWithConcurrency } = await import('../services/queue.mjs');
+  const concurrency = parseInt(process.env.CONCURRENCY || '2');
 
-  for (const job of compressionJobs) {
+  const updateJob = isAuthenticated(req)
+    ? (id, data) => updateProcessingJob(id, data).catch(e => guestUpdateJob(id, data))
+    : (id, data) => guestUpdateJob(id, data);
+
+  const updateHistory = isAuthenticated(req)
+    ? (id, data) => updateFileHistory(id, data).catch(e => guestUpdateFileHistory(id, data))
+    : (id, data) => guestUpdateFileHistory(id, data);
+
+  await runWithConcurrency(compressionJobs, async (job) => {
     try {
-      // Update job status to processing
-      await updateProcessingJob(job.jobId, {
-        status: 'processing',
-        progress: 0,
-        logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Starting compression...' }])
-      });
+      await updateJob(job.jobId, { status: 'processing', progress: 0, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Starting compression...' }]) });
 
-      // Get file history
-      const fileHistory = await getFileHistoryById(job.fileHistoryId);
-
-      // Compress file
+      const fileHistory = await getHistoryRecord(req, job.fileHistoryId);
       const result = await compressFile(
         fileHistory.original_path,
         compressionLevel,
@@ -283,56 +209,37 @@ async function processCompression(mainJobId, compressionJobs, compressionLevel, 
         removeMetadata,
         fileHistory.original_filename,
         (progress, log) => {
-          updateProcessingJob(job.jobId, {
-            status: 'processing',
-            progress,
-            logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: log }])
-          });
+          updateJob(job.jobId, { status: 'processing', progress, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: log }]) });
         }
       );
 
-      const { uploadToSupabase } = await import('../services/supabaseService.js');
-      const supabaseResult = await uploadToSupabase(result.path, `compressed/${path.basename(result.path)}`);
+      let download_url = null;
+      try {
+        const { uploadToSupabase } = await import('../services/supabaseService.js');
+        const sup = await uploadToSupabase(result.path, `compressed/${path.basename(result.path)}`);
+        download_url = sup.publicUrl;
+        try { fs.unlinkSync(result.path); } catch {}
+      } catch (supErr) {
+        console.warn('[COMPRESS] Supabase upload failed:', supErr.message);
+        download_url = `/api/processed/${path.basename(result.path)}`;
+      }
 
-      // Update file history with results
-      await updateFileHistory(job.fileHistoryId, {
+      await updateHistory(job.fileHistoryId, {
         processed_filename: result.filename,
         processed_path: result.path,
-        download_url: supabaseResult.publicUrl,
-        supabase_path: supabaseResult.supabasePath,
+        download_url,
         processed_size: result.size,
+        original_size: result.originalSize,
         processing_time: result.processingTime,
         status: 'completed'
       });
-
-      // Update job status to completed
-      await updateProcessingJob(job.jobId, {
-        status: 'completed',
-        progress: 100,
-        logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Compression completed successfully' }])
-      });
-
-      if (supabaseResult.publicUrl) {
-        import('fs').then(fsMod => fsMod.unlink(result.path, () => {}));
-      }
-
+      await updateJob(job.jobId, { status: 'completed', progress: 100, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: 'Compression completed' }]) });
     } catch (error) {
-      console.error(`Compression failed for job ${job.jobId}:`, error);
-
-      // Update job status to failed
-      await updateProcessingJob(job.jobId, {
-        status: 'failed',
-        progress: 0,
-        logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: `Compression failed: ${error.message}` }])
-      });
-
-      // Update file history with error
-      await updateFileHistory(job.fileHistoryId, {
-        status: 'failed',
-        error_message: error.message
-      });
+      console.error('[COMPRESS] Error:', error.message);
+      await updateJob(job.jobId, { status: 'failed', progress: 0, logs: JSON.stringify([{ timestamp: new Date().toISOString(), message: `Compression failed: ${error.message}` }]) });
+      await updateHistory(job.fileHistoryId, { status: 'failed', error_message: error.message });
     }
-  }
+  }, concurrency);
 }
 
 export default router;

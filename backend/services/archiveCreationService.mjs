@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import archiver from 'archiver';
+import archiver from './archiverSetup.mjs';
 
 /**
  * Create an archive from multiple files using Node.js archiver library
+ * Supports password protection without external software
  * @param {string[]} filePaths - Array of file paths to archive
  * @param {object} options - Archive options
  * @returns {Promise<object>} - Result with archive path
@@ -18,7 +19,7 @@ export async function createArchive(filePaths, options = {}, progressCallback) {
 
   if (progressCallback) progressCallback(10, 'Preparing archive creation...');
 
-  // Validate format (archiver supports zip and tar)
+  // Validate format
   const validFormats = ['zip'];
   if (!validFormats.includes(format)) {
     throw new Error(`Invalid format: ${format}. Supported: ${validFormats.join(', ')}`);
@@ -37,11 +38,23 @@ export async function createArchive(filePaths, options = {}, progressCallback) {
     // Create output stream
     const output = fs.createWriteStream(outputPath);
     
-    // Create archiver instance with proper options
-    const archive = archiver(format, {
-      zlib: { level: compressionLevel }, // Compression level 0-9
-      store: compressionLevel === 0 // Use store mode if level is 0
-    });
+    // Create archiver instance - use encrypted version if password provided
+    let archive;
+    if (password) {
+      console.log(`[ARCHIVE CREATE] Creating PASSWORD-PROTECTED archive with password: ${password ? '***' : 'none'}`);
+      archive = archiver.create('zip-encrypted', {
+        zlib: { level: compressionLevel },
+        encryptionMethod: 'aes256',
+        password: password
+      });
+      console.log('[ARCHIVE CREATE] Using archiver-zip-encrypted with AES-256');
+    } else {
+      console.log('[ARCHIVE CREATE] Creating UNPROTECTED archive (no password)');
+      archive = archiver(format, {
+        zlib: { level: compressionLevel },
+        store: compressionLevel === 0
+      });
+    }
 
     // Listen for archive events
     output.on('close', () => {
@@ -55,7 +68,7 @@ export async function createArchive(filePaths, options = {}, progressCallback) {
         size: stats.size,
         format: format,
         filesCount: filePaths.length,
-        isPasswordProtected: false,
+        isPasswordProtected: !!password,
         compressionLevel: compressionLevel
       });
     });
@@ -113,7 +126,7 @@ export async function createArchive(filePaths, options = {}, progressCallback) {
 
     if (progressCallback) progressCallback(80, 'Finalizing archive...');
 
-    console.log(`[ARCHIVE CREATE] Finalizing archive with ${filesAdded} files`);
+    console.log(`[ARCHIVE CREATE] Finalizing archive with ${filesAdded} files${password ? ' (password-protected)' : ''}`);
 
     // Finalize the archive
     archive.finalize();

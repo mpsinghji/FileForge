@@ -188,12 +188,15 @@ export const convertFile = async (file, targetFormat) => {
 };
 
 
-export const compressFile = async (file, compressionLevel = 6, quality = 'high', removeMetadata = false) => {
+export const compressFile = async (file, compressionLevel = 'medium', quality = 'high', removeMetadata = false) => {
   const formData = new FormData();
   formData.append('files', file);
-  formData.append('compressionLevel', compressionLevel);
-  formData.append('quality', quality);
-  formData.append('removeMetadata', removeMetadata);
+  // Ensure compressionLevel is always a valid string value
+  const validLevels = ['light', 'medium', 'high', 'extreme'];
+  const safeLevel = validLevels.includes(String(compressionLevel)) ? String(compressionLevel) : 'medium';
+  formData.append('compressionLevel', safeLevel);
+  formData.append('quality', quality || 'high');
+  formData.append('removeMetadata', removeMetadata || false);
 
   const response = await fetch(`${API_BASE_URL}/compression/compress`, {
     method: 'POST',
@@ -210,9 +213,12 @@ export const compressFile = async (file, compressionLevel = 6, quality = 'high',
 export const extractText = async (file, mode = 'auto', includeMetadata = false, language = 'auto') => {
   const formData = new FormData();
   formData.append('files', file);
-  formData.append('mode', mode);
-  formData.append('includeMetadata', includeMetadata);
-  formData.append('language', language);
+  // Ensure mode is always a valid string
+  const validModes = ['auto', 'ocr', 'native', 'hybrid'];
+  const safeMode = validModes.includes(String(mode)) ? String(mode) : 'auto';
+  formData.append('mode', safeMode);
+  formData.append('includeMetadata', String(includeMetadata || false));
+  formData.append('language', language || 'auto');
 
   const response = await fetch(`${API_BASE_URL}/extraction/extract`, {
     method: 'POST',
@@ -332,6 +338,15 @@ export const getCompressionStatus = async (jobId) => {
   return handleResponse(response);
 };
 
+export const getExtractionStatus = async (jobId) => {
+  const response = await fetch(`${API_BASE_URL}/extraction/status/${jobId}`, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+  return handleResponse(response);
+};
+
 
 export const getHistory = async () => {
   const response = await fetch(`${API_BASE_URL}/history`, {
@@ -400,6 +415,18 @@ export const mergePDFs = async (files) => {
     method: 'POST',
     headers: { ...getAuthHeaders() },
     body: formData,
+  });
+  return handleResponse(response);
+};
+
+export const mergeSplitPDFs = async (splitDir) => {
+  const response = await fetch(`${API_BASE_URL}/pdf/merge-split`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify({ splitDir }),
   });
   return handleResponse(response);
 };

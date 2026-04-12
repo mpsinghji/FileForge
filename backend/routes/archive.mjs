@@ -21,6 +21,9 @@ router.post('/create',
     const { format = 'zip', password, compressionLevel = 5, archiveName } = req.body;
     const startTime = Date.now();
 
+    console.log('[ARCHIVE CREATE] Request body:', { format, password: password ? '***' : 'NONE', compressionLevel, archiveName });
+    console.log('[ARCHIVE CREATE] Password provided:', !!password, 'Length:', password?.length || 0);
+
     try {
       const filePaths = req.files.map(f => f.path);
       

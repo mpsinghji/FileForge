@@ -1,77 +1,90 @@
 import React from 'react';
 import { useDarkMode } from '../App';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../store/useAuth';
 
 function Sidebar({ activePanel, setActivePanel }) {
   const { darkMode } = useDarkMode();
   const { t } = useLanguage();
+  const { isAuthenticated } = useAuth();
 
   const menuItems = [
     {
       id: 'conversion',
       label: t('sidebar.conversion'),
       icon: '🔄',
-      description: t('sidebar.conversion.desc')
+      description: t('sidebar.conversion.desc'),
+      requiresAuth: false
     },
     {
       id: 'compression',
       label: t('sidebar.compression'),
       icon: '🗜️',
-      description: t('sidebar.compression.desc')
+      description: t('sidebar.compression.desc'),
+      requiresAuth: false
     },
     {
       id: 'text-extraction',
       label: t('sidebar.textExtraction'),
       icon: '📝',
-      description: t('sidebar.textExtraction.desc')
+      description: t('sidebar.textExtraction.desc'),
+      requiresAuth: false
     },
     {
       id: 'archive-extraction',
       label: t('sidebar.archiveExtraction'),
       icon: '📦',
-      description: t('sidebar.archiveExtraction.desc')
+      description: t('sidebar.archiveExtraction.desc'),
+      requiresAuth: false
     },
     {
       id: 'pdf-splitter',
       label: 'PDF Splitter',
       icon: '✂️',
-      description: 'Split PDF into pages'
+      description: 'Split PDF into pages',
+      requiresAuth: false
     },
     {
       id: 'pdf-merger',
       label: 'PDF Merger',
       icon: '📑',
-      description: 'Merge multiple PDFs'
+      description: 'Merge multiple PDFs',
+      requiresAuth: false
     },
     {
       id: 'file-encryptor',
       label: 'File Encryptor',
       icon: '🔐',
-      description: 'Encrypt/decrypt files'
+      description: 'Encrypt/decrypt files',
+      requiresAuth: false
     },
     {
       id: 'qr-generator',
       label: 'QR Generator',
       icon: '📱',
-      description: 'Create QR codes'
+      description: 'Create QR codes',
+      requiresAuth: false
     },
     {
       id: 'archive-creation',
       label: 'Archive Creator',
       icon: '🗜️',
-      description: 'Create compressed archives'
+      description: 'Create compressed archives',
+      requiresAuth: false
     },
     {
       id: 'history',
       label: t('sidebar.history'),
       icon: '📋',
-      description: t('sidebar.history.desc')
+      description: t('sidebar.history.desc'),
+      requiresAuth: true // Only show when logged in
     },
     {
       id: 'settings',
       label: t('sidebar.settings'),
       icon: '⚙️',
-      description: t('sidebar.settings.desc')
+      description: t('sidebar.settings.desc'),
+      requiresAuth: false
     }
   ];
 
@@ -90,7 +103,9 @@ function Sidebar({ activePanel, setActivePanel }) {
       </div>
 
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {menuItems.map((item) => (
+        {menuItems
+          .filter(item => !item.requiresAuth || isAuthenticated) // Hide auth-required items for guests
+          .map((item) => (
           <button
             key={item.id}
             onClick={() => setActivePanel(item.id)}
@@ -122,14 +137,39 @@ function Sidebar({ activePanel, setActivePanel }) {
       </nav>
 
       <div className={`p-4 border-t flex-shrink-0 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className={`rounded-lg p-3 ${darkMode
-          ? 'bg-gradient-to-r from-indigo-900 to-blue-900'
-          : 'bg-gradient-to-r from-indigo-50 to-blue-50'
-          }`}>
-          <div className="flex items-center space-x-2">
+        {!isAuthenticated ? (
+          // Guest user - show login button
+          <button
+            onClick={() => {
+              // Trigger auth modal
+              const event = new CustomEvent('openAuthModal');
+              window.dispatchEvent(event);
+            }}
+            className={`w-full rounded-lg p-3 transition-all duration-200 ${
+              darkMode
+                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white'
+                : 'bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 text-white'
+            }`}
+          >
+            <div className="flex items-center justify-center space-x-2">
+              <span className="text-lg">🔐</span>
+              <span className="font-semibold">Login to Save History</span>
+            </div>
+            <p className={`text-xs mt-1 ${darkMode ? 'text-blue-100' : 'text-blue-50'}`}>
+              Optional - works without login
+            </p>
+          </button>
+        ) : (
+          // Logged in user - show status
+          <div className={`rounded-lg p-3 ${darkMode
+            ? 'bg-gradient-to-r from-indigo-900 to-blue-900'
+            : 'bg-gradient-to-r from-indigo-50 to-blue-50'
+            }`}>
+            <div className="flex items-center space-x-2">
+            </div>
+            <p className={`text-xs mt-1 ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('sidebar.ready')}</p>
           </div>
-          <p className={`text-xs mt-1 ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{t('sidebar.ready')}</p>
-        </div>
+        )}
       </div>
     </div>
   );

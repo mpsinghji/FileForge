@@ -4,7 +4,8 @@ const fileHistorySchema = new mongoose.Schema({
   user_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false,   // ← optional: null for guest/unauthenticated users
+    default: null
   },
   original_filename: {
     type: String,
@@ -60,10 +61,14 @@ const fileHistorySchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // null user_id = guest session (not persisted past 7 days like auth users)
+  is_guest: {
+    type: Boolean,
+    default: false
+  },
   expires_at: {
     type: Date,
     default: function() {
-      // Set expiry to 7 days from creation
       const expiryDate = new Date();
       expiryDate.setDate(expiryDate.getDate() + 7);
       return expiryDate;
@@ -74,10 +79,11 @@ const fileHistorySchema = new mongoose.Schema({
   timestamps: true
 });
 
-fileHistorySchema.index({ user_id: 1, createdAt: -1 });
+// Sparse index so null user_ids are excluded from the user index
+fileHistorySchema.index({ user_id: 1, createdAt: -1 }, { sparse: true });
 fileHistorySchema.index({ operation_type: 1, status: 1, createdAt: -1 });
 fileHistorySchema.index({ original_filename: 'text' });
-fileHistorySchema.index({ expires_at: 1 }); // Index for efficient expiry queries
+fileHistorySchema.index({ expires_at: 1 });
 
 const FileHistory = mongoose.model('FileHistory', fileHistorySchema);
 
