@@ -1,9 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import unzipper from 'unzipper';
 import { execa } from 'execa';
 import sevenBin from '7zip-bin';
+
+const __serviceDir = path.dirname(fileURLToPath(import.meta.url));
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -201,6 +204,40 @@ async function extractZip(zipPath, outDir, { overwriteExisting, password }, prog
   }
 }
 
+// ─── RAR extraction via node-unrar-js (lazy-loaded WASM) ──────────────────────
+async function extractRar(rarPath, outDir, { password }, progressCallback) {
+  console.log('[ARCHIVE] Using node-unrar-js for RAR');
+  try {
+    const { createExtractorFromFile } = await import('node-unrar-js');
+    const wasmBinary = fs.readFileSync(
+      path.join(__serviceDir, '../node_modules/node-unrar-js/dist/js/unrar.wasm')
+    );
+    const extractor = await createExtractorFromFile({
+      wasmBinary,
+      filepath: rarPath,
+      targetPath: outDir,
+      password: password || undefined,
+    });
+    const { files } = extractor.extract();
+    let count = 0;
+    for (const file of files) {
+      count++;
+      if (progressCallback) progressCallback(
+        Math.min(90, 10 + count * 5),
+        `Extracting: ${file.fileHeader.name}`
+      );
+    }
+    if (progressCallback) progressCallback(95, 'RAR extraction complete');
+    console.log(`[ARCHIVE] node-unrar-js extracted ${count} entries`);
+  } catch (err) {
+    const msg = err.message || '';
+    if (msg.includes('password') || msg.includes('MISSING_PASSWORD') || msg.includes('BAD_PASSWORD')) {
+      throw new Error('PASSWORD_REQUIRED: This RAR archive is password-protected. Please enter the password.');
+    }
+    throw new Error(`RAR extraction failed: ${msg}`);
+  }
+}
+
 // ─── Main export ─────────────────────────────────────────────────────────────
 
 export async function extractArchive(inputPath, options = {}, progressCallback) {
@@ -223,20 +260,24 @@ export async function extractArchive(inputPath, options = {}, progressCallback) 
   try {
     if (progressCallback) progressCallback(10, 'Preparing archive extraction...');
 
-    // All formats go through 7-Zip first (it's the most reliable)
-    try {
-      await extractWith7z(inputPath, outputDir, { overwriteExisting, password }, progressCallback);
-    } catch (err) {
-      // Named errors bubble up immediately without fallback
-      if (err.message.startsWith('PASSWORD_REQUIRED:') || err.message.startsWith('WRONG_PASSWORD:')) {
-        throw err;
-      }
-      // For ZIPs only, try the unzipper fallback
-      if (inputExt === '.zip') {
-        console.log('[ARCHIVE] 7-Zip failed, trying unzipper fallback:', err.message);
-        await extractZip(inputPath, outputDir, { overwriteExisting, password }, progressCallback);
-      } else {
-        throw err;
+    // For RAR files: skip 7-Zip (no RAR codec) and go straight to node-unrar-js
+    if (inputExt === '.rar') {
+      await extractRar(inputPath, outputDir, { password }, progressCallback);
+    } else {
+      // All other formats: try 7-Zip first
+      try {
+        await extractWith7z(inputPath, outputDir, { overwriteExisting, password }, progressCallback);
+      } catch (err) {
+        if (err.message.startsWith('PASSWORD_REQUIRED:') || err.message.startsWith('WRONG_PASSWORD:')) {
+          throw err;
+        }
+        // For ZIPs: try unzipper fallback
+        if (inputExt === '.zip') {
+          console.log('[ARCHIVE] 7-Zip failed, trying unzipper fallback:', err.message);
+          await extractZip(inputPath, outputDir, { overwriteExisting, password }, progressCallback);
+        } else {
+          throw err;
+        }
       }
     }
 

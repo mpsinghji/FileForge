@@ -57,9 +57,12 @@ export const uploadToSupabase = async (localFilePath, destinationKey) => {
       .from(BUCKET_NAME)
       .getPublicUrl(destinationKey);
 
+    // Append ?download=filename to force browsers to save the file rather than display it inline
+    const forceDownloadUrl = `${urlData.publicUrl}?download=${encodeURIComponent(path.basename(localFilePath))}`;
+
     return {
       supabasePath: data.path,
-      publicUrl: urlData.publicUrl,
+      publicUrl: forceDownloadUrl,
     };
   } catch (error) {
     console.error(`Supabase upload failed for ${localFilePath}:`, error);

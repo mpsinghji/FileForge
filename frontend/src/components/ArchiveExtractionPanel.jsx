@@ -91,13 +91,8 @@ function ArchiveExtractionPanel({
         // Select all by default
         setSelectedFiles(new Set(df.fileList.map(f => f.relativePath)));
       } else {
-        // No list from backend — create a synthetic one-item list
-        setFileList([{
-          name: df.processedFile || df.originalFile || 'extracted.zip',
-          relativePath: '__bundle__',
-          size: df.size || 0,
-        }]);
-        setSelectedFiles(new Set(['__bundle__']));
+        setFileList([]);
+        setSelectedFiles(new Set());
       }
     } else {
       setFileList([]);
@@ -138,22 +133,36 @@ function ArchiveExtractionPanel({
     });
   };
 
-  const handleDownloadAll = () => {
-    if (extractedBundle) onDownload(extractedBundle);
+  // Download a single file by its Supabase URL
+  const handleDownloadSingle = (file) => {
+    if (!file.download_url) return;
+    let finalUrl = file.download_url;
+    try {
+      if (finalUrl.startsWith('http') && !finalUrl.includes('download=')) {
+        const urlObj = new URL(finalUrl);
+        urlObj.searchParams.set('download', file.name);
+        finalUrl = urlObj.toString();
+      }
+    } catch (e) {}
+
+    const a = document.createElement('a');
+    a.href = finalUrl;
+    a.download = file.name;
+    // We add target _blank to help decouple the downloads in the browser's eyes
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
-  // For individual file download — we point to the bundle and note the filename
-  const handleDownloadSelected = () => {
-    if (!extractedBundle) return;
-    // For the download-all-selected scenario, we just download the full bundle
-    // (individual-file streaming would need a separate backend endpoint)
-    onDownload(extractedBundle);
-  };
-
-  const handleDownloadSingle = (filePath) => {
-    if (!extractedBundle) return;
-    // Download the whole bundle — in a future enhancement a separate endpoint can serve individual files
-    onDownload(extractedBundle);
+  // Download all selected files one by one with a delay
+  const handleDownloadAll = async () => {
+    const toDownload = fileList.filter(f => selectedFiles.has(f.relativePath) && f.download_url);
+    for (let i = 0; i < toDownload.length; i++) {
+      handleDownloadSingle(toDownload[i]);
+      // Wait 1.5 seconds between downloads to bypass browser spam protection reliably
+      if (i < toDownload.length - 1) await new Promise(r => setTimeout(r, 1500));
+    }
   };
 
   const selectedCount = fileList.filter(f => selectedFiles.has(f.relativePath)).length;
@@ -383,55 +392,52 @@ function ArchiveExtractionPanel({
 
               {/* Download action buttons */}
               <div className="space-y-2">
-                {/* Download All */}
+                {/* Download All Selected */}
                 <button
                   onClick={handleDownloadAll}
-                  className="w-full py-3 px-4 rounded-xl font-semibold text-sm bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:shadow-lg hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2"
-                >
-                  <span>⬇️</span>
-                  <span>Download All as ZIP ({fileList.length} files)</span>
-                </button>
-
-                {/* Download Selected */}
-                <button
-                  onClick={handleDownloadSelected}
                   disabled={noneSelected}
                   className={`w-full py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
                     !noneSelected
-                      ? dm
-                        ? 'bg-indigo-800 text-indigo-200 hover:bg-indigo-700'
-                        : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                      : dm
-                      ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white hover:shadow-lg hover:scale-105'
+                      : dm ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  <span>📦</span>
-                  <span>Download Selected ({selectedCount})</span>
+                  <span>⬇️</span>
+                  <span>Download Selected ({selectedCount}) – Individual Files</span>
                 </button>
 
-                {/* Per-file download — shown when multiple files exist */}
-                {fileList.length > 1 && (
-                  <div className={`mt-3 pt-3 border-t ${dm ? 'border-gray-700' : 'border-gray-200'}`}>
-                    <p className={`text-xs mb-2 font-medium ${dm ? 'text-gray-400' : 'text-gray-500'}`}>Individual file downloads:</p>
-                    <div className="space-y-1">
-                      {fileList.filter(f => selectedFiles.has(f.relativePath)).map((f, idx) => (
-                        <div key={idx} className={`flex items-center justify-between py-1.5 px-3 rounded-lg ${dm ? 'bg-gray-750 hover:bg-gray-700' : 'bg-gray-50 hover:bg-gray-100'} transition-colors`}>
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-sm">{fileIcon(f.name)}</span>
-                            <span className={`text-xs truncate ${dm ? 'text-gray-300' : 'text-gray-700'}`}>{f.name}</span>
+                {/* Per-file download list */}
+                <div className={`mt-3 pt-3 border-t ${dm ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <p className={`text-xs mb-2 font-medium ${dm ? 'text-gray-400' : 'text-gray-500'}`}>Download each file individually:</p>
+                  <div className="space-y-1.5">
+                    {fileList.map((f, idx) => (
+                      <div key={idx} className={`flex items-center justify-between py-2 px-3 rounded-lg ${
+                        selectedFiles.has(f.relativePath)
+                          ? dm ? 'bg-indigo-900/40 border border-indigo-600' : 'bg-indigo-50 border border-indigo-200'
+                          : dm ? 'bg-gray-700 border border-transparent' : 'bg-gray-50 border border-transparent'
+                      } transition-colors`}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-base">{fileIcon(f.name)}</span>
+                          <div className="min-w-0">
+                            <div className={`text-xs font-medium truncate ${dm ? 'text-gray-200' : 'text-gray-800'}`}>{f.name}</div>
+                            {f.size > 0 && <div className={`text-[10px] ${dm ? 'text-gray-500' : 'text-gray-400'}`}>{formatBytes(f.size)}</div>}
                           </div>
-                          <button
-                            onClick={() => handleDownloadSingle(f.relativePath)}
-                            className="ml-2 flex-shrink-0 text-xs px-2 py-1 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-500 text-white hover:scale-105 transition-all"
-                          >
-                            ↓
-                          </button>
                         </div>
-                      ))}
-                    </div>
+                        <button
+                          onClick={() => handleDownloadSingle(f)}
+                          disabled={!f.download_url}
+                          className={`ml-2 flex-shrink-0 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                            f.download_url
+                              ? 'bg-gradient-to-r from-indigo-500 to-blue-500 text-white hover:scale-105 hover:shadow-md'
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
+                        >
+                          {f.download_url ? '⬇ Download' : 'Unavailable'}
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           )}

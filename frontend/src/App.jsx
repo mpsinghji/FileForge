@@ -33,7 +33,14 @@ export const useDarkMode = () => {
 };
 
 function App() {
-  const [activePanel, setActivePanel] = useState('conversion');
+  const [activePanel, setActivePanel] = useState(() => {
+    return localStorage.getItem('app_activePanel') || 'conversion';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('app_activePanel', activePanel);
+  }, [activePanel]);
+
   const [files, setFiles] = useState([]);
   const { tabs, activeTabId, setTabPanel, setTabFiles } = useWorkspace();
   const [isProcessing, setIsProcessing] = useState(false);

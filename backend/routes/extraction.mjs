@@ -419,38 +419,25 @@ router.post('/archive',
           fileList = listExtractedFiles(r.path);
         }
 
-        // Bundle the extracted folder into a single ZIP for clean one-click download
-        let download_url = null;
-        let bundleFilename = null;
-        if (r.path && fs.existsSync(r.path)) {
+        // Upload each extracted file individually to Supabase
+        const { uploadToSupabase } = await import('../services/supabaseService.js');
+        const enrichedFileList = [];
+        for (const extractedFile of fileList) {
+          const fullPath = path.join(r.path, extractedFile.relativePath);
+          let fileUrl = null;
           try {
-            const archiver = (await import('archiver')).default;
-            const baseName = path.basename(file.originalname, path.extname(file.originalname));
-            bundleFilename = `${baseName}-extracted.zip`;
-            const bundlePath = path.join('processed', bundleFilename);
-            await new Promise((resolve, reject) => {
-              const output = fs.createWriteStream(bundlePath);
-              const archive = archiver('zip', { zlib: { level: 6 } });
-              output.on('close', resolve);
-              archive.on('error', reject);
-              archive.pipe(output);
-              archive.directory(r.path, false);
-              archive.finalize();
-            });
-            try {
-              const { uploadToSupabase } = await import('../services/supabaseService.js');
-              const sup = await uploadToSupabase(bundlePath, `extracted/${bundleFilename}`);
-              download_url = sup.publicUrl;
-              try { fs.unlinkSync(bundlePath); } catch { }
-            } catch (supErr) {
-              console.warn('[ARCHIVE ROUTE] Supabase upload failed:', supErr.message);
-              download_url = `/api/processed/${bundleFilename}`;
+            if (fs.existsSync(fullPath)) {
+              const supabasePath = `extracted/${path.basename(file.originalname, path.extname(file.originalname))}/${extractedFile.relativePath}`;
+              const sup = await uploadToSupabase(fullPath, supabasePath);
+              fileUrl = sup.publicUrl;
             }
-            try { fs.rmSync(r.path, { recursive: true, force: true }); } catch { }
-          } catch (bundleErr) {
-            console.error('[ARCHIVE ROUTE] Bundle failed:', bundleErr.message);
+          } catch (supErr) {
+            console.warn(`[ARCHIVE ROUTE] Supabase upload failed for ${extractedFile.name}:`, supErr.message);
           }
+          enrichedFileList.push({ ...extractedFile, download_url: fileUrl });
         }
+        // Clean up extracted folder after uploads
+        try { fs.rmSync(r.path, { recursive: true, force: true }); } catch { }
 
         results.push({
           original: file.originalname,
@@ -458,9 +445,7 @@ router.post('/archive',
           filesExtracted: r.filesExtracted,
           size: r.size,
           processingTime: r.processingTime,
-          download_url,
-          filename: bundleFilename || r.filename,
-          fileList,
+          fileList: enrichedFileList,
         });
       } catch (error) {
         console.error('[ARCHIVE ROUTE] Error for', file.originalname, ':', error.message);
