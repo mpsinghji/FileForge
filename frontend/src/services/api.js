@@ -1,7 +1,7 @@
 import { useAuth } from '../store/useAuth';
 
 const normalizeBaseUrl = (url) => (url || '').replace(/\/+$/, '');
-const DEFAULT_PROD_API_URL = 'https://fileforge-backend-zb6f.onrender.com';
+const DEFAULT_PROD_API_URL = 'https://fileforge-6pc1.onrender.com';
 const API_BASE_URL = `${normalizeBaseUrl(
   import.meta.env.VITE_API_BASE_URL ||
     (import.meta.env.PROD ? DEFAULT_PROD_API_URL : '')
